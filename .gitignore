@@ -1,0 +1,11 @@
+venv/
+.env
+__pycache__/
+*.pyc
+youtube_dbt/target/
+youtube_dbt/logs/
+youtube_dbt/dbt_packages/
+.prefect/
+*.log
+GUIDE_DEPLOYMENT.md
+DEPLOIEMENT_PRODUCTION.md

@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: raw
+    database: YOUTUBE_RAW
+    schema: INGESTION
+    tables:
+      - name: ALI_ABDAAL_VIDEOS
+        description: "Données brutes des vidéos YouTube Ali Abdaal chargées depuis le CSV"
