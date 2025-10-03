@@ -5,15 +5,25 @@ Pipeline YouTube → Snowflake → dbt
 
 if __name__ == "__main__":
     from main import pipeline_complet
+    from prefect.deployments.steps.core import run_step
 
     # Déployer avec schedule quotidien à 12h (midi)
+    # Utilise le code local (git pull) au lieu de Docker
     pipeline_complet.deploy(
         name="production-daily-12h",
         work_pool_name="default-pool",
         cron="0 12 * * *",  # Tous les jours à 12h00
         tags=["production", "youtube", "daily"],
         version="1.0.0",
-        description="Pipeline YouTube → Snowflake → dbt - Exécution quotidienne à midi"
+        description="Pipeline YouTube → Snowflake → dbt - Exécution quotidienne à midi",
+        pull_steps=[
+            {
+                "prefect.deployments.steps.git_clone": {
+                    "repository": "https://github.com/lucaszub/youtube-snowflake-pipeline.git",
+                    "branch": "main"
+                }
+            }
+        ]
     )
 
     print("✅ Déploiement créé avec succès!")

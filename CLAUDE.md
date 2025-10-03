@@ -136,7 +136,7 @@ prefect deployment ls
 prefect deployment run "Pipeline YouTube → Snowflake → dbt/production-daily-12h"
 ```
 
-**Note:** `deploy.py` uses Prefect 3.x `flow.deploy()` method, not the deprecated `Deployment.build_from_flow()`.
+**Note:** `deploy.py` uses Prefect 3.x `flow.deploy()` method with `pull_steps` for Git-based deployment (no Docker required).
 
 ## Snowflake Configuration
 
