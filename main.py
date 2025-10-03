@@ -77,14 +77,12 @@ def dbt_run():
 
 @flow(name="Pipeline YouTube → Snowflake → dbt")
 def pipeline_complet():
-    """Pipeline complet: Azure Function → Snowflake → dbt"""
+    """Pipeline complet: YouTube → Blob Storage → Snowflake → dbt"""
 
-    # Étape 1: Extraction YouTube → Blob Storage (SKIP pour aujourd'hui - quota dépassé)
-    #blob_result = api_to_blob()
-    print("⏭️  YouTube extraction skippée (quota dépassé, réessayez demain)")
-    
+    # Étape 1: Extraction YouTube → Blob Storage
+    blob_result = api_to_blob()
 
-    # Étape 2: Snowflake COPY INTO (charge les fichiers déjà sur Blob)
+    # Étape 2: Snowflake COPY INTO
     snowflake_result = copy_into()
 
     # Étape 3: dbt run
@@ -93,7 +91,7 @@ def pipeline_complet():
     print("\n🎉 Pipeline terminé avec succès!")
 
     return {
-        "youtube": "blob_result",
+        "youtube": blob_result,
         "snowflake": snowflake_result,
         "dbt": dbt_result
     }
