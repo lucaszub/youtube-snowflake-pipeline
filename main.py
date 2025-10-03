@@ -52,7 +52,9 @@ def dbt_run():
     print("🔧 Lancement dbt run...")
 
     # Chemin vers votre projet dbt
-    dbt_project_dir = "/home/lucas-zubiarrain/prefect/youtube_dbt"
+    # Local: /home/lucas-zubiarrain/prefect/youtube_dbt
+    # Production VPS:
+    dbt_project_dir = "/home/prefect/prefect-production/youtube-snowflake-pipeline/youtube_dbt"
 
     print(f"📂 Répertoire dbt: {dbt_project_dir}")
 

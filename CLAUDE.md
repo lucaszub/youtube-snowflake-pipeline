@@ -85,7 +85,7 @@ SNOWFLAKE_WAREHOUSE=COMPUTE_WH
 SNOWFLAKE_DATABASE=YOUTUBE_RAW
 SNOWFLAKE_SCHEMA=INGESTION
 SNOWFLAKE_ROLE=ACCOUNTADMIN
-DBT_PROJECT_DIR=/path/to/prefect/youtube_dbt
+DBT_PROJECT_DIR=/home/prefect/prefect-production/youtube-snowflake-pipeline/youtube_dbt  # Production VPS path
 ```
 
 ### Running Locally
