@@ -123,10 +123,13 @@ python main.py  # Starts temporary Prefect server automatically
 prefect config set PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://user:pass@localhost/prefect_db"
 prefect config set PREFECT_API_URL="http://localhost:4200/api"
 
-# 2. Create deployment with schedule (Prefect 3.x syntax)
+# 2. Create work pool (one-time setup)
+prefect work-pool create default-pool --type process
+
+# 3. Create deployment with schedule (Prefect 3.x syntax)
 python deploy.py
 
-# 3. Start worker
+# 4. Start worker
 prefect worker start --pool default-pool
 
 # View deployments
@@ -136,7 +139,7 @@ prefect deployment ls
 prefect deployment run "Pipeline YouTube → Snowflake → dbt/production-daily-12h"
 ```
 
-**Note:** `deploy.py` uses Prefect 3.x `flow.deploy()` method with `pull_steps` for Git-based deployment (no Docker required).
+**Note:** `deploy.py` uses `flow.from_source()` with `GitRepository` for Git-based deployment (no Docker required).
 
 ## Snowflake Configuration
 
