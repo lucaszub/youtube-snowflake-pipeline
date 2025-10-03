@@ -7,4 +7,3 @@ youtube_dbt/logs/
 youtube_dbt/dbt_packages/
 .prefect/
 *.log
-.claude/
