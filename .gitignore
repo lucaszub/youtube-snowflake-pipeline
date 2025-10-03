@@ -9,3 +9,5 @@ youtube_dbt/dbt_packages/
 *.log
 GUIDE_DEPLOYMENT.md
 DEPLOIEMENT_PRODUCTION.md
+
+GUIDE_DEPLOIEMENT_VPS.md
