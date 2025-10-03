@@ -3,8 +3,12 @@ import requests
 import os
 from dotenv import load_dotenv
 
-# Charger les variables d'environnement depuis .env
-load_dotenv()
+# Charge le .env du répertoire courant
+load_dotenv('/home/prefect/prefect-production/youtube-snowflake-pipeline/.env')
+
+# Vérifie que la variable est bien chargée
+print("YOUTUBE_API_KEY =", os.getenv("YOUTUBE_API_KEY"))
+
 
 @task(retries=3, retry_delay_seconds=60)
 def api_to_blob():
