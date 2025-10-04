@@ -6,6 +6,7 @@ Pipeline YouTube → Snowflake → dbt
 if __name__ == "__main__":
     from main import pipeline_complet
     from prefect.runner.storage import GitRepository
+    from prefect.client.schemas.schedules import CronSchedule
 
     # Déployer avec schedule quotidien à 12h (midi)
     # Utilise Git pour récupérer le code (pas de Docker)
@@ -18,8 +19,12 @@ if __name__ == "__main__":
     ).deploy(
         name="production-daily-12h",
         work_pool_name="default-pool",
-        cron="0 12 * * *",  # Tous les jours à 12h00
-        timezone="America/Argentina/Buenos_Aires",
+        schedules=[
+            CronSchedule(
+                cron="0 12 * * *",
+                timezone="America/Argentina/Buenos_Aires"
+            )
+        ],
         tags=["production", "youtube", "daily"],
         version="1.0.0",
         description="Pipeline YouTube → Snowflake → dbt - Exécution quotidienne à midi"
