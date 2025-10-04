@@ -19,6 +19,7 @@ if __name__ == "__main__":
         name="production-daily-12h",
         work_pool_name="default-pool",
         cron="0 12 * * *",  # Tous les jours à 12h00
+        timezone="America/Argentina/Buenos_Aires",
         tags=["production", "youtube", "daily"],
         version="1.0.0",
         description="Pipeline YouTube → Snowflake → dbt - Exécution quotidienne à midi"
@@ -26,7 +27,7 @@ if __name__ == "__main__":
 
     print("✅ Déploiement créé avec succès!")
     print("   Nom: production-daily-12h")
-    print("   Schedule: Tous les jours à 12h00 (Europe/Paris)")
+    print("   Schedule: Tous les jours à 12h00 (America/Argentina/Buenos_Aires)")
     print("   Tags: production, youtube, daily")
     print("\n📝 Commandes utiles:")
     print("   - Lister les déploiements: prefect deployment ls")

@@ -16,7 +16,7 @@ YouTube data pipeline orchestrated with Prefect, extracting video metrics from Y
 **Deployment:**
 - Production-ready with systemd services
 - PostgreSQL backend for Prefect metadata
-- Scheduled execution (daily at 12:00 PM Europe/Paris)
+- Scheduled execution (daily at 12:00 PM America/Argentina/Buenos_Aires)
 
 ## Architecture
 
@@ -43,7 +43,7 @@ youtube_extractor  Parquet files    COPY INTO   Analytics models
    - Uses credentials from environment variables
 
 4. **deploy.py** - Prefect deployment configuration
-   - Defines scheduled execution (daily at 12:00 PM Europe/Paris)
+   - Defines scheduled execution (daily at 12:00 PM America/Argentina/Buenos_Aires)
    - Production deployment with tags and versioning
 
 ### dbt Project Structure (`youtube_dbt/`)
