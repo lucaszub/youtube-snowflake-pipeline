@@ -60,13 +60,17 @@ def dbt_run():
     # Production VPS:
     dbt_project_dir = "/home/prefect/prefect-production/youtube-snowflake-pipeline/youtube_dbt"
 
+    # Chemin absolu vers dbt dans le virtualenv de production
+    dbt_executable = "/home/prefect/prefect-production/youtube-snowflake-pipeline/venv/bin/dbt"
+
     print(f"📂 Répertoire dbt: {dbt_project_dir}")
+    print(f"🔧 Exécutable dbt: {dbt_executable}")
 
     # Passer les variables d'environnement à dbt
     env = os.environ.copy()
 
     result = subprocess.run(
-        ["dbt", "run"],
+        [dbt_executable, "run"],
         cwd=dbt_project_dir,
         env=env,  # Passer les variables d'environnement
         capture_output=True,
