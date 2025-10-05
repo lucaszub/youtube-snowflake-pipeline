@@ -15,7 +15,7 @@ if __name__ == "__main__":
             url="https://github.com/lucaszub/youtube-snowflake-pipeline.git",
             branch="main"
         ),
-        entrypoint="main.py:pipeline_complet"
+        entrypoint="pipelines/youtube/main.py:pipeline_complet"
     ).deploy(
         name="production-daily-12h",
         work_pool_name="default-pool",

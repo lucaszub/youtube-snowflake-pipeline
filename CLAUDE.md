@@ -4,14 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-YouTube data pipeline orchestrated with Prefect, extracting video metrics from YouTube API, storing in Azure Blob Storage, loading into Snowflake, and transforming with dbt.
+Collection of data pipelines orchestrated with Prefect 3.x.
+
+### Pipelines disponibles:
+1. **YouTube Pipeline** - Extrait métriques YouTube → Azure Blob → Snowflake → dbt
+2. **GitHub Trending Pipeline** - Track repos trending par technologie → Azure Blob → Snowflake
 
 **Tech Stack:**
 - **Orchestration**: Prefect 3.x (workflow orchestration with scheduling)
-- **Data Source**: YouTube Data API v3
+- **Data Sources**: YouTube Data API v3, GitHub API
 - **Storage**: Azure Blob Storage (Parquet files)
 - **Data Warehouse**: Snowflake
 - **Transformation**: dbt (data build tool)
+
+**Project Structure:**
+```
+pipelines/
+  youtube/     - Pipeline YouTube (daily 12h ART)
+  github/      - Pipeline GitHub Trending (daily 6h ART)
+```
 
 **Deployment:**
 - Production-ready with systemd services
