@@ -42,9 +42,8 @@ RUN useradd -m -u 1000 prefect && \
 
 USER prefect
 
-# Healthcheck pour vérifier que le worker est actif
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD prefect worker status || exit 1
+# Healthcheck désactivé - 'prefect worker status' n'existe pas dans Prefect 3.x
+# Le worker est considéré healthy s'il tourne (pas de healthcheck spécifique)
 
 # Commande par défaut : démarrer le worker Prefect
 # Le work pool peut être surchargé via docker-compose ou CLI

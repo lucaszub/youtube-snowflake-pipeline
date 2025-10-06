@@ -7,10 +7,12 @@ Ce dossier contient les workflows CI/CD pour les pipelines Prefect.
 ### 1. `ci.yml` - Continuous Integration
 
 **Déclenchement:**
+
 - Push sur `main` ou `develop`
 - Pull Request vers `main`
 
 **Actions:**
+
 1. Lint du code (ruff)
 2. Tests unitaires (pytest)
 3. Validation dbt
@@ -18,6 +20,7 @@ Ce dossier contient les workflows CI/CD pour les pipelines Prefect.
 5. Push vers GitHub Container Registry (`ghcr.io`)
 
 **Tags créés:**
+
 - `main` - Pour les commits sur main
 - `main-abc1234` - SHA court du commit
 - `latest` - Dernière version de main
@@ -25,10 +28,12 @@ Ce dossier contient les workflows CI/CD pour les pipelines Prefect.
 ### 2. `cd.yml` - Continuous Deployment
 
 **Déclenchement:**
+
 - Push sur `main` (automatique)
 - Manuel via GitHub UI (workflow_dispatch)
 
 **Actions:**
+
 1. SSH vers VPS de production
 2. Pull nouvelle image Docker
 3. Backup PostgreSQL
@@ -43,12 +48,12 @@ Ce dossier contient les workflows CI/CD pour les pipelines Prefect.
 
 **Settings → Secrets and variables → Actions → New repository secret**
 
-| Secret | Description | Exemple |
-|--------|-------------|---------|
-| `VPS_SSH_KEY` | Clé SSH privée pour accéder au VPS | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` |
-| `VPS_USER` | Username sur le VPS | `prefect` |
-| `VPS_HOST` | IP ou hostname du VPS | `192.168.1.100` ou `vps.example.com` |
-| `SLACK_WEBHOOK` | (Optionnel) Webhook Slack pour notifications | `https://hooks.slack.com/services/...` |
+| Secret          | Description                                  | Exemple                                    |
+| --------------- | -------------------------------------------- | ------------------------------------------ |
+| `VPS_SSH_KEY`   | Clé SSH privée pour accéder au VPS           | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` |
+| `VPS_USER`      | Username sur le VPS                          | `prefect`                                  |
+| `VPS_HOST`      | IP ou hostname du VPS                        | `192.168.1.100` ou `vps.example.com`       |
+| `SLACK_WEBHOOK` | (Optionnel) Webhook Slack pour notifications | `https://hooks.slack.com/services/...`     |
 
 ### Générer la clé SSH
 
@@ -82,6 +87,7 @@ git push origin main
 ### Déclenchement manuel
 
 **Via GitHub UI:**
+
 1. Aller sur l'onglet "Actions"
 2. Sélectionner "CD - Deploy to Production"
 3. Cliquer "Run workflow"
@@ -89,6 +95,7 @@ git push origin main
 5. Cliquer "Run workflow"
 
 **Via GitHub CLI:**
+
 ```bash
 gh workflow run cd.yml
 ```
@@ -154,6 +161,7 @@ docker pull ghcr.io/votre-username/prefect:latest
 **Cause:** Clé SSH mal configurée
 
 **Solutions:**
+
 1. Vérifier que `VPS_SSH_KEY` contient la clé privée complète
 2. Vérifier que la clé publique est dans `~/.ssh/authorized_keys` sur le VPS
 3. Tester manuellement: `ssh -i ~/.ssh/github_actions user@vps-ip`
@@ -169,6 +177,7 @@ docker pull ghcr.io/votre-username/prefect:latest
 **Cause:** Le runner n'a pas Docker (rare sur ubuntu-latest)
 
 **Solution:** Ajouter step:
+
 ```yaml
 - name: Setup Docker
   uses: docker/setup-buildx-action@v3
@@ -226,7 +235,7 @@ Modifier dans `ci.yml`:
 
 ```yaml
 env:
-  REGISTRY: docker.io  # ou 123456789.dkr.ecr.us-east-1.amazonaws.com
+  REGISTRY: docker.io # ou 123456789.dkr.ecr.us-east-1.amazonaws.com
   IMAGE_NAME: username/prefect-pipelines
 ```
 
@@ -241,7 +250,7 @@ on:
 
 jobs:
   deploy:
-    environment: staging  # Déploie sur staging au lieu de prod
+    environment: staging # Déploie sur staging au lieu de prod
 ```
 
 ## 🔗 Liens utiles
