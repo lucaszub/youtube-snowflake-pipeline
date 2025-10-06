@@ -62,7 +62,8 @@ jobs:
 
             # Restart worker uniquement (zero-downtime deployment)
             echo "🔄 Restarting worker..."
-            /usr/local/bin/docker-compose up -d --no-deps --force-recreate prefect-worker
+            /usr/local/bin/docker-compose up -d --no-deps --force-recreate prefect-worker 2>&1
+            echo "✅ Worker restarted"
 
             # Attendre que le worker soit prêt
             echo "⏳ Waiting for worker to be ready..."
@@ -70,16 +71,20 @@ jobs:
 
             # Redeploy flows Prefect
             echo "📤 Deploying Prefect flows..."
-            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py || echo "⚠️  YouTube deployment failed"
-            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/github/deploy.py || echo "⚠️  GitHub deployment failed"
-            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/test/deploy.py || echo "⚠️  Test deployment failed"
+            echo "  → YouTube pipeline..."
+            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py 2>&1 || echo "⚠️  YouTube deployment failed"
+            echo "  → GitHub pipeline..."
+            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/github/deploy.py 2>&1 || echo "⚠️  GitHub deployment failed"
+            echo "  → Test pipeline..."
+            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/test/deploy.py 2>&1 || echo "⚠️  Test deployment failed"
 
             # Health check
             echo "🏥 Running health checks..."
-            /usr/local/bin/docker-compose ps
+            /usr/local/bin/docker-compose ps 2>&1
 
             # Vérifier que le worker est opérationnel
-            /usr/local/bin/docker-compose exec -T prefect-worker prefect worker status || echo "⚠️  Worker status check failed"
+            echo "🔍 Checking worker status..."
+            /usr/local/bin/docker-compose exec -T prefect-worker prefect worker status 2>&1 || echo "⚠️  Worker status check failed"
 
             # Cleanup old images (garder seulement les 5 dernières)
             echo "🧹 Cleaning up old images..."
