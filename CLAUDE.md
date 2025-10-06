@@ -7,11 +7,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Collection of data pipelines orchestrated with Prefect 3.x.
 
 ### Pipelines disponibles:
+
 1. **YouTube Pipeline** - Extrait métriques YouTube → Azure Blob → Snowflake → dbt
 2. **GitHub Trending Pipeline** - Track repos trending par technologie → Azure Blob → Snowflake
 3. **Test Pipeline** - Pipeline de validation (exécution toutes les 2 minutes)
 
 **Tech Stack:**
+
 - **Orchestration**: Prefect 3.x (workflow orchestration with scheduling)
 - **Data Sources**: YouTube Data API v3, GitHub API
 - **Storage**: Azure Blob Storage (Parquet files)
@@ -19,6 +21,7 @@ Collection of data pipelines orchestrated with Prefect 3.x.
 - **Transformation**: dbt (data build tool)
 
 **Project Structure:**
+
 ```
 pipelines/
   youtube/     - Pipeline YouTube (daily 12h ART)
@@ -27,6 +30,7 @@ pipelines/
 ```
 
 **Deployment:**
+
 - Docker-based deployment with docker-compose
 - PostgreSQL backend for Prefect metadata
 - Scheduled execution (daily at 12:00 PM America/Argentina/Buenos_Aires)
@@ -36,6 +40,7 @@ pipelines/
 ## Architecture
 
 ### Pipeline Flow
+
 ```
 YouTube API → Azure Blob Storage → Snowflake → dbt transformations
      ↓              ↓                   ↓            ↓
@@ -45,15 +50,18 @@ youtube_extractor  Parquet files    COPY INTO   Analytics models
 ### Key Components
 
 1. **main.py** - Main Prefect flow orchestrating 3 tasks:
+
    - `api_to_blob()`: Extracts YouTube data and uploads to Blob Storage
    - `copy_into()`: Loads Parquet files from Blob into Snowflake raw table
    - `dbt_run()`: Executes dbt transformations
 
 2. **youtube_extractor.py** - YouTube API client
+
    - `YouTubeSearcher` class: Fetches channel and video metadata
    - `extract_and_upload()`: Main function that extracts from configured channels and uploads as Parquet
 
 3. **snowflake_connector.py** - Snowflake connection manager
+
    - Context manager for safe connection handling
    - Uses credentials from environment variables
 
@@ -64,6 +72,7 @@ youtube_extractor  Parquet files    COPY INTO   Analytics models
 ### dbt Project Structure (`youtube_dbt/`)
 
 **Models hierarchy:**
+
 - `staging/stg_youtube_videos.sql`: Cleaned raw data from `YOUTUBE_RAW.INGESTION.YOUTUBE_VIDEOS`
 - `analytics/`:
   - `dim_channel.sql`: Channel dimension (deduped by channel_id)
@@ -78,6 +87,7 @@ youtube_extractor  Parquet files    COPY INTO   Analytics models
 ## Development Commands
 
 ### Setup
+
 ```bash
 # Create virtual environment
 python3.11 -m venv venv
@@ -88,7 +98,9 @@ pip install -r requirements.txt
 ```
 
 ### Environment Configuration
+
 Create `.env` file with:
+
 ```env
 YOUTUBE_API_KEY=your_key
 AZURE_STORAGE_CONNECTION_STRING=your_connection_string
@@ -106,16 +118,19 @@ DBT_PROJECT_DIR=/home/prefect/prefect-production/youtube-snowflake-pipeline/yout
 ### Running Locally
 
 **Run complete pipeline:**
+
 ```bash
 python main.py
 ```
 
 **Test Snowflake connection:**
+
 ```bash
 python snowflake_connector.py
 ```
 
 **Run dbt only:**
+
 ```bash
 cd youtube_dbt
 dbt run                                    # Run all models
@@ -128,11 +143,13 @@ dbt test                                   # Run data quality tests
 ### Prefect Development
 
 **Local testing (temporary server):**
+
 ```bash
 python main.py  # Starts temporary Prefect server automatically
 ```
 
 **Docker-based deployment (recommended):**
+
 ```bash
 # 1. Start all services (Postgres + Prefect Server + Worker)
 docker compose up -d
@@ -152,6 +169,7 @@ docker compose down
 ```
 
 **Workflow evolution (after code changes):**
+
 ```bash
 # 1. Modify code locally
 vim pipelines/github/main.py
@@ -169,6 +187,7 @@ docker compose exec prefect-worker python /app/pipelines/github/deploy.py
 ## Snowflake Configuration
 
 The pipeline expects:
+
 - Database: `YOUTUBE_RAW`
 - Schema: `INGESTION`
 - Table: `YOUTUBE_VIDEOS` (target for COPY INTO)
@@ -180,17 +199,20 @@ The COPY INTO command in `main.py` line 30-36 loads from the external stage.
 ## Important Notes
 
 ### YouTube API Quota
+
 - Default quota: 10,000 units/day
 - Resets at midnight Pacific Time
 - If quota exceeded, comment out `api_to_blob()` call in `main.py` line 83 and run with existing Blob files
 
 ### dbt Incremental Models
+
 - `fct_video_snapshot` is incremental with `unique_key=['video_id', 'loaded_at']`
 - On each run, only new combinations are inserted
 - To reload everything: `dbt run --full-refresh --select fct_video_snapshot`
 - If model is out of sync with source, drop the table in Snowflake and run `dbt run`
 
 ### CI/CD & Deployment
+
 - See `CI_CD_GUIDE.md` for complete CI/CD setup
 - Docker images automatically built and pushed to Azure Container Registry
 - GitHub Actions workflows in `.github/workflows/`:
@@ -202,7 +224,9 @@ The COPY INTO command in `main.py` line 30-36 loads from the external stage.
 ## Modifying the Pipeline
 
 ### Adding New YouTube Channels
+
 Edit `youtube_extractor.py` line ~87, add channel IDs to the list:
+
 ```python
 channel_ids = [
     "UCoOae5nYA7VqaXzerajD0lg",
@@ -211,24 +235,30 @@ channel_ids = [
 ```
 
 ### Changing Schedule
+
 Edit `deploy.py` line 13:
+
 ```python
 cron="0 12 * * *",  # Daily at 12:00 PM
 cron="0 */6 * * *", # Every 6 hours
 ```
 
 Then redeploy:
+
 ```bash
 python deploy.py
 systemctl restart prefect-worker  # On VPS
 ```
 
 ### Adding New dbt Models
+
 Place in appropriate folder:
+
 - `youtube_dbt/models/staging/` for source cleaning
 - `youtube_dbt/models/analytics/` for business logic
 
 Tag models for selective execution:
+
 ```sql
 {{ config(
     materialized='table',
