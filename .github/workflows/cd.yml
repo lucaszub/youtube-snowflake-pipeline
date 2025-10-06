@@ -6,8 +6,8 @@ on:
   workflow_dispatch:  # Permet déclenchement manuel depuis l'UI GitHub
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
+  IMAGE_NAME: prefect-pipelines
 
 jobs:
   deploy:
@@ -38,23 +38,23 @@ jobs:
             echo "🚀 Starting deployment..."
 
             # Navigation vers le répertoire du projet
-            cd /home/prefect/prefect-production || cd ~/prefect-production
+            cd /home/prefect/prefect-production/youtube-snowflake-pipeline || cd ~/prefect-production/youtube-snowflake-pipeline
 
             # Pull dernières modifications Git
             echo "📥 Pulling latest code..."
             git pull origin main
 
-            # Login au GitHub Container Registry
-            echo "🔐 Logging in to registry..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Login au Azure Container Registry
+            echo "🔐 Logging in to Azure ACR..."
+            echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
 
             # Pull nouvelle image
             echo "📦 Pulling new Docker image..."
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-$(echo ${{ env.IMAGE_TAG }} | cut -c1-7)
+            docker pull ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
 
             # Tag comme latest (pour docker-compose)
             echo "🏷️  Tagging as latest..."
-            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-$(echo ${{ env.IMAGE_TAG }} | cut -c1-7) prefect-pipelines:latest
+            docker tag ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest prefect-pipelines:latest
 
             # Backup database (PostgreSQL)
             echo "💾 Backing up database..."
