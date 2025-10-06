@@ -46,7 +46,7 @@ youtube_dbt/dbt_packages/
 .coverage
 htmlcov/
 *.test
-test_*.py
+# Note: test_*.py pattern removed to avoid excluding pipelines/test/ directory
 
 # CI/CD
 .github/
