@@ -9,6 +9,7 @@ Collection of data pipelines orchestrated with Prefect 3.x.
 ### Pipelines disponibles:
 1. **YouTube Pipeline** - Extrait métriques YouTube → Azure Blob → Snowflake → dbt
 2. **GitHub Trending Pipeline** - Track repos trending par technologie → Azure Blob → Snowflake
+3. **Test Pipeline** - Pipeline de validation (exécution toutes les 2 minutes)
 
 **Tech Stack:**
 - **Orchestration**: Prefect 3.x (workflow orchestration with scheduling)
@@ -22,6 +23,7 @@ Collection of data pipelines orchestrated with Prefect 3.x.
 pipelines/
   youtube/     - Pipeline YouTube (daily 12h ART)
   github/      - Pipeline GitHub Trending (daily 6h ART)
+  test/        - Pipeline de test (every 2 minutes)
 ```
 
 **Deployment:**

@@ -72,6 +72,7 @@ jobs:
             echo "📤 Deploying Prefect flows..."
             /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py || echo "⚠️  YouTube deployment failed"
             /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/github/deploy.py || echo "⚠️  GitHub deployment failed"
+            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/test/deploy.py || echo "⚠️  Test deployment failed"
 
             # Health check
             echo "🏥 Running health checks..."
