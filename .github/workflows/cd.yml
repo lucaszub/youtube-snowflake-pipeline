@@ -29,72 +29,20 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
 
+      - name: Copy deployment script to VPS
+        run: |
+          scp scripts/deploy_vps.sh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deploy_vps.sh
+          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "chmod +x /tmp/deploy_vps.sh"
+
       - name: Deploy to VPS
         env:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
-          IMAGE_TAG: ${{ github.sha }}
+          ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
-          ssh $VPS_USER@$VPS_HOST << 'ENDSSH'
-            set -e
-
-            echo "🚀 Starting deployment..."
-
-            # Navigation vers le répertoire du projet
-            cd /home/prefect/prefect-production/youtube-snowflake-pipeline || cd ~/prefect-production/youtube-snowflake-pipeline
-
-            # Pull dernières modifications Git
-            echo "📥 Pulling latest code..."
-            git pull origin main
-
-            # Login au Azure Container Registry
-            echo "🔐 Logging in to Azure ACR..."
-            echo "${{ secrets.ACR_PASSWORD }}" | docker login ${{ secrets.ACR_LOGIN_SERVER }} -u ${{ secrets.ACR_USERNAME }} --password-stdin
-
-            # Pull nouvelle image
-            echo "📦 Pulling new Docker image..."
-            docker pull ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
-
-            # Tag comme latest (pour docker-compose)
-            echo "🏷️  Tagging as latest..."
-            docker tag ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest prefect-pipelines:latest
-
-            # Backup database (PostgreSQL)
-            echo "💾 Backing up database..."
-            /usr/local/bin/docker-compose exec -T postgres pg_dump -U prefect prefect > backup_$(date +%Y%m%d_%H%M%S).sql || echo "⚠️  Backup failed, continuing..."
-
-            # Restart worker uniquement (zero-downtime deployment)
-            echo "🔄 Restarting worker..."
-            /usr/local/bin/docker-compose up -d --no-deps --force-recreate prefect-worker 2>&1
-            echo "✅ Worker restarted"
-
-            # Attendre que le worker soit prêt
-            echo "⏳ Waiting for worker to be ready..."
-            sleep 15
-
-            # Redeploy flows Prefect
-            echo "📤 Deploying Prefect flows..."
-            echo "  → YouTube pipeline..."
-            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py 2>&1 || echo "⚠️  YouTube deployment failed"
-            echo "  → GitHub pipeline..."
-            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/github/deploy.py 2>&1 || echo "⚠️  GitHub deployment failed"
-            echo "  → Test pipeline..."
-            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/test/deploy.py 2>&1 || echo "⚠️  Test deployment failed"
-
-            # Health check
-            echo "🏥 Running health checks..."
-            /usr/local/bin/docker-compose ps 2>&1
-
-            # Vérifier que le worker est opérationnel
-            echo "🔍 Checking worker status..."
-            /usr/local/bin/docker-compose exec -T prefect-worker prefect worker status 2>&1 || echo "⚠️  Worker status check failed"
-
-            # Cleanup old images (garder seulement les 5 dernières)
-            echo "🧹 Cleaning up old images..."
-            docker images | grep "${{ env.IMAGE_NAME }}" | tail -n +6 | awk '{print $3}' | xargs -r docker rmi || true
-
-            echo "✅ Deployment completed successfully!"
-          ENDSSH
+          ssh $VPS_USER@$VPS_HOST "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER ACR_USERNAME=$ACR_USERNAME ACR_PASSWORD=$ACR_PASSWORD /tmp/deploy_vps.sh"
 
       - name: Health Check
         run: |
