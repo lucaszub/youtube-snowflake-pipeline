@@ -2,6 +2,16 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Claude Code Guidelines
+
+**IMPORTANT**: Always use GitHub CLI (`gh`) to interact with GitHub:
+- View workflow runs: `gh run list`, `gh run view <run-id> --log`
+- Check PR status: `gh pr list`, `gh pr view <pr-number>`
+- View issues: `gh issue list`, `gh issue view <issue-number>`
+- Repository info: `gh repo view`
+- Never manually construct GitHub URLs or web interface links
+- Use `gh` commands for all GitHub-related queries and operations
+
 ## Project Overview
 
 Collection of data pipelines orchestrated with Prefect 3.x.
