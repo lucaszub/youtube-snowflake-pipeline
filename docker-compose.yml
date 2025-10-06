@@ -1,0 +1,78 @@
+# docker-compose.yml pour Prefect self-hosted
+
+services:
+  # Base de données PostgreSQL pour Prefect
+  postgres:
+    image: postgres:16-alpine
+    container_name: prefect-postgres
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect
+      POSTGRES_DB: prefect
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prefect"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prefect-network
+
+  # Serveur Prefect (API + UI)
+  prefect-server:
+    image: prefecthq/prefect:3-python3.11
+    container_name: prefect-server
+    command: prefect server start --host 0.0.0.0
+    environment:
+      PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+      PREFECT_SERVER_API_PORT: 4200
+      PREFECT_UI_API_URL: http://localhost:4200/api
+    ports:
+      - "4200:4200"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4200/api/health\")'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - prefect-network
+
+  # Worker Prefect (exécute les pipelines)
+  prefect-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prefect-worker
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      # Variables depuis .env
+      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      BLOB_CONTAINER_NAME: ${BLOB_CONTAINER_NAME}
+      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
+      SNOWFLAKE_USER: ${SNOWFLAKE_USER}
+      SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD}
+      SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE}
+      SNOWFLAKE_DATABASE: ${SNOWFLAKE_DATABASE}
+      SNOWFLAKE_SCHEMA: ${SNOWFLAKE_SCHEMA}
+      SNOWFLAKE_ROLE: ${SNOWFLAKE_ROLE}
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - prefect-network
+
+volumes:
+  postgres_data:
+
+networks:
+  prefect-network:
+    driver: bridge

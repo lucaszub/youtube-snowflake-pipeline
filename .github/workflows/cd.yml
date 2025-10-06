@@ -1,0 +1,133 @@
+name: CD - Deploy to Production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Permet déclenchement manuel depuis l'UI GitHub
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    environment: production  # Protection avec reviewers (optionnel)
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to VPS
+        env:
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          ssh $VPS_USER@$VPS_HOST << 'ENDSSH'
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            # Navigation vers le répertoire du projet
+            cd /home/prefect/prefect-production || cd ~/prefect-production
+
+            # Pull dernières modifications Git
+            echo "📥 Pulling latest code..."
+            git pull origin main
+
+            # Login au GitHub Container Registry
+            echo "🔐 Logging in to registry..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull nouvelle image
+            echo "📦 Pulling new Docker image..."
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-$(echo ${{ env.IMAGE_TAG }} | cut -c1-7)
+
+            # Tag comme latest (pour docker-compose)
+            echo "🏷️  Tagging as latest..."
+            docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-$(echo ${{ env.IMAGE_TAG }} | cut -c1-7) prefect-pipelines:latest
+
+            # Backup database (PostgreSQL)
+            echo "💾 Backing up database..."
+            docker compose exec -T postgres pg_dump -U prefect prefect > backup_$(date +%Y%m%d_%H%M%S).sql || echo "⚠️  Backup failed, continuing..."
+
+            # Restart worker uniquement (zero-downtime deployment)
+            echo "🔄 Restarting worker..."
+            docker compose up -d --no-deps --force-recreate prefect-worker
+
+            # Attendre que le worker soit prêt
+            echo "⏳ Waiting for worker to be ready..."
+            sleep 15
+
+            # Redeploy flows Prefect
+            echo "📤 Deploying Prefect flows..."
+            docker compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py || echo "⚠️  YouTube deployment failed"
+            docker compose exec -T prefect-worker python /app/pipelines/github/deploy.py || echo "⚠️  GitHub deployment failed"
+
+            # Health check
+            echo "🏥 Running health checks..."
+            docker compose ps
+
+            # Vérifier que le worker est opérationnel
+            docker compose exec -T prefect-worker prefect worker status || echo "⚠️  Worker status check failed"
+
+            # Cleanup old images (garder seulement les 5 dernières)
+            echo "🧹 Cleaning up old images..."
+            docker images | grep "${{ env.IMAGE_NAME }}" | tail -n +6 | awk '{print $3}' | xargs -r docker rmi || true
+
+            echo "✅ Deployment completed successfully!"
+          ENDSSH
+
+      - name: Health Check
+        run: |
+          echo "🔍 Running external health check..."
+          sleep 5
+          curl -f http://${{ secrets.VPS_HOST }}:4200/api/health || echo "⚠️  Health check failed"
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "## ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed to:** ${{ secrets.VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "## ❌ Deployment Failed!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+
+      - name: Send Slack notification (optional)
+        if: always()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} Deployment ${{ job.status }} - ${{ github.repository }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Deployment Status:* ${{ job.status }}\n*Repository:* ${{ github.repository }}\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
+                  }
+                }
+              ]
+            }

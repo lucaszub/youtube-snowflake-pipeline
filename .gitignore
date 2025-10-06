@@ -7,3 +7,5 @@ youtube_dbt/logs/
 youtube_dbt/dbt_packages/
 .prefect/
 *.log
+.acr_credentials.txt
+scripts/.acr_credentials.txt

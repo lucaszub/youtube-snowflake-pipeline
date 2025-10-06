@@ -25,9 +25,11 @@ pipelines/
 ```
 
 **Deployment:**
-- Production-ready with systemd services
+- Docker-based deployment with docker-compose
 - PostgreSQL backend for Prefect metadata
 - Scheduled execution (daily at 12:00 PM America/Argentina/Buenos_Aires)
+- CI/CD with GitHub Actions → Azure Container Registry
+- Automated deployment via GitHub Actions workflows
 
 ## Architecture
 
@@ -128,29 +130,39 @@ dbt test                                   # Run data quality tests
 python main.py  # Starts temporary Prefect server automatically
 ```
 
-**Production deployment:**
+**Docker-based deployment (recommended):**
 ```bash
-# 1. Configure Prefect (PostgreSQL backend)
-prefect config set PREFECT_API_DATABASE_CONNECTION_URL="postgresql+asyncpg://user:pass@localhost/prefect_db"
-prefect config set PREFECT_API_URL="http://localhost:4200/api"
+# 1. Start all services (Postgres + Prefect Server + Worker)
+docker compose up -d
 
-# 2. Create work pool (one-time setup)
-prefect work-pool create default-pool --type process
+# 2. Access Prefect UI
+# http://localhost:4200
 
-# 3. Create deployment with schedule (Prefect 3.x syntax)
-python deploy.py
+# 3. Deploy flows
+docker compose exec prefect-worker python /app/pipelines/youtube/deploy.py
+docker compose exec prefect-worker python /app/pipelines/github/deploy.py
 
-# 4. Start worker
-prefect worker start --pool default-pool
+# 4. View logs
+docker compose logs -f prefect-worker
 
-# View deployments
-prefect deployment ls
-
-# Manual trigger
-prefect deployment run "Pipeline YouTube → Snowflake → dbt/production-daily-12h"
+# 5. Stop services
+docker compose down
 ```
 
-**Note:** `deploy.py` uses `flow.from_source()` with `GitRepository` for Git-based deployment (no Docker required).
+**Workflow evolution (after code changes):**
+```bash
+# 1. Modify code locally
+vim pipelines/github/main.py
+
+# 2. Rebuild & restart
+docker compose up -d --build
+
+# 3. Redeploy flows
+docker compose exec prefect-worker python /app/pipelines/github/deploy.py
+
+# 4. Test in UI
+# http://localhost:4200 → Deployments → Quick Run
+```
 
 ## Snowflake Configuration
 
@@ -176,10 +188,14 @@ The COPY INTO command in `main.py` line 30-36 loads from the external stage.
 - To reload everything: `dbt run --full-refresh --select fct_video_snapshot`
 - If model is out of sync with source, drop the table in Snowflake and run `dbt run`
 
-### Deployment
-- See `DEPLOIEMENT_PRODUCTION.md` for complete VPS deployment guide
-- Requires PostgreSQL for production Prefect server
-- Uses systemd services for 24/7 operation
+### CI/CD & Deployment
+- See `CI_CD_GUIDE.md` for complete CI/CD setup
+- Docker images automatically built and pushed to Azure Container Registry
+- GitHub Actions workflows in `.github/workflows/`:
+  - `ci.yml` - Build & push Docker image to ACR
+  - `cd.yml` - Deploy to production VPS
+- Setup script: `scripts/setup_azure_acr.sh` to create Azure Container Registry
+- Secrets required in GitHub: `ACR_LOGIN_SERVER`, `ACR_USERNAME`, `ACR_PASSWORD`
 
 ## Modifying the Pipeline
 
