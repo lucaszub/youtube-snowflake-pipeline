@@ -28,7 +28,7 @@ WORKDIR /app
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
-# Copier tout le code du projet (pipelines inclut youtube_dbt)
+# Copier tout le code du projet (pipelines inclut youtube_dbt + test)
 COPY pipelines/ /app/pipelines/
 
 # Variables d'environnement
