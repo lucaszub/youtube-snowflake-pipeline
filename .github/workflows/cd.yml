@@ -1,7 +1,9 @@
 name: CD - Deploy to Production
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI - Build & Push to Registry"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:  # Permet déclenchement manuel depuis l'UI GitHub
 
@@ -13,6 +15,7 @@ jobs:
   deploy:
     name: Deploy to VPS
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     environment: production  # Protection avec reviewers (optionnel)
 
     steps:
