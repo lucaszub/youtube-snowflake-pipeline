@@ -58,11 +58,11 @@ jobs:
 
             # Backup database (PostgreSQL)
             echo "💾 Backing up database..."
-            docker compose exec -T postgres pg_dump -U prefect prefect > backup_$(date +%Y%m%d_%H%M%S).sql || echo "⚠️  Backup failed, continuing..."
+            /usr/local/bin/docker-compose exec -T postgres pg_dump -U prefect prefect > backup_$(date +%Y%m%d_%H%M%S).sql || echo "⚠️  Backup failed, continuing..."
 
             # Restart worker uniquement (zero-downtime deployment)
             echo "🔄 Restarting worker..."
-            docker compose up -d --no-deps --force-recreate prefect-worker
+            /usr/local/bin/docker-compose up -d --no-deps --force-recreate prefect-worker
 
             # Attendre que le worker soit prêt
             echo "⏳ Waiting for worker to be ready..."
@@ -70,15 +70,15 @@ jobs:
 
             # Redeploy flows Prefect
             echo "📤 Deploying Prefect flows..."
-            docker compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py || echo "⚠️  YouTube deployment failed"
-            docker compose exec -T prefect-worker python /app/pipelines/github/deploy.py || echo "⚠️  GitHub deployment failed"
+            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py || echo "⚠️  YouTube deployment failed"
+            /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/github/deploy.py || echo "⚠️  GitHub deployment failed"
 
             # Health check
             echo "🏥 Running health checks..."
-            docker compose ps
+            /usr/local/bin/docker-compose ps
 
             # Vérifier que le worker est opérationnel
-            docker compose exec -T prefect-worker prefect worker status || echo "⚠️  Worker status check failed"
+            /usr/local/bin/docker-compose exec -T prefect-worker prefect worker status || echo "⚠️  Worker status check failed"
 
             # Cleanup old images (garder seulement les 5 dernières)
             echo "🧹 Cleaning up old images..."
