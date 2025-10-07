@@ -36,8 +36,9 @@ echo "  → YouTube pipeline..."
 /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/youtube/deploy.py
 echo "  → GitHub pipeline..."
 /usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/github/deploy.py
-echo "  → Test pipeline..."
-/usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/test/deploy.py
+echo "  → Binance pipeline..."
+/usr/local/bin/docker-compose exec -T prefect-worker python /app/pipelines/Binance/deploy.py
+
 
 # 8. Verify deployments
 echo "✅ Verifying deployments..."

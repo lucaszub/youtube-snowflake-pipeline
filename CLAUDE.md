@@ -20,12 +20,12 @@ Collection of data pipelines orchestrated with Prefect 3.x.
 
 1. **YouTube Pipeline** - Extrait métriques YouTube → Azure Blob → Snowflake → dbt
 2. **GitHub Trending Pipeline** - Track repos trending par technologie → Azure Blob → Snowflake
-3. **Test Pipeline** - Pipeline de validation (exécution toutes les 2 minutes)
+3. **Binance Pipeline** - Extraction données crypto en temps réel (exécution toutes les 5 minutes)
 
 **Tech Stack:**
 
 - **Orchestration**: Prefect 3.x (workflow orchestration with scheduling)
-- **Data Sources**: YouTube Data API v3, GitHub API
+- **Data Sources**: YouTube Data API v3, GitHub API, Binance API
 - **Storage**: Azure Blob Storage (Parquet files)
 - **Data Warehouse**: Snowflake
 - **Transformation**: dbt (data build tool)
@@ -36,7 +36,7 @@ Collection of data pipelines orchestrated with Prefect 3.x.
 pipelines/
   youtube/     - Pipeline YouTube (daily 12h ART)
   github/      - Pipeline GitHub Trending (daily 6h ART)
-  test/        - Pipeline de test (every 2 minutes)
+  Binance/     - Pipeline Binance crypto real-time (every 5 minutes)
 ```
 
 **Deployment:**
@@ -170,6 +170,7 @@ docker compose up -d
 # 3. Deploy flows
 docker compose exec prefect-worker python /app/pipelines/youtube/deploy.py
 docker compose exec prefect-worker python /app/pipelines/github/deploy.py
+docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
 
 # 4. View logs
 docker compose logs -f prefect-worker
@@ -233,7 +234,38 @@ The COPY INTO command in `main.py` line 30-36 loads from the external stage.
 
 **Docker Cache Management:**
 
-The Dockerfile uses a `CACHE_BUST` build argument to force invalidation of Docker layer cache when pipeline files change. This ensures that new pipeline directories (like `test/`) are properly included in the Docker image even when GitHub Actions cache is enabled. Without this, the `COPY pipelines/` layer could use stale cached data from before new files were added.
+The Dockerfile uses a `CACHE_BUST` build argument to force invalidation of Docker layer cache when pipeline files change. This ensures that new pipeline directories (like `Binance/`) are properly included in the Docker image even when GitHub Actions cache is enabled. Without this, the `COPY pipelines/` layer could use stale cached data from before new files were added.
+
+### Binance Pipeline
+
+**Pipeline Binance Real-Time** (`pipelines/Binance/`):
+- **Schedule**: Every 5 minutes (*/5 * * * *)
+- **Data Source**: Binance Public REST API (no API key required)
+- **Symbols tracked**: BTCUSDT, ETHUSDT, BNBUSDT
+- **Data extracted**:
+  - 24h ticker data (price, price change %, volume, high/low)
+  - Order book (best bid/ask, spread)
+  - Recent trades (last 5 trades average price)
+
+**Files**:
+- `main.py`: Prefect flow orchestrating extraction task
+- `binance_extractor.py`: BinanceExtractor class for API calls
+- `deploy.py`: Prefect deployment configuration (5-minute schedule)
+
+**Current Phase**: Extraction only (phase 1)
+- Phase 2 (todo): Upload to Azure Blob Storage
+- Phase 3 (todo): Load to Snowflake
+- Phase 4 (todo): Next.js visualization dashboard
+
+**Run locally**:
+```bash
+python pipelines/Binance/main.py
+```
+
+**Deploy to Prefect**:
+```bash
+docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
+```
 
 ## Modifying the Pipeline
 
