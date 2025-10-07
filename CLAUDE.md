@@ -231,6 +231,10 @@ The COPY INTO command in `main.py` line 30-36 loads from the external stage.
 - Setup script: `scripts/setup_azure_acr.sh` to create Azure Container Registry
 - Secrets required in GitHub: `ACR_LOGIN_SERVER`, `ACR_USERNAME`, `ACR_PASSWORD`
 
+**Docker Cache Management:**
+
+The Dockerfile uses a `CACHE_BUST` build argument to force invalidation of Docker layer cache when pipeline files change. This ensures that new pipeline directories (like `test/`) are properly included in the Docker image even when GitHub Actions cache is enabled. Without this, the `COPY pipelines/` layer could use stale cached data from before new files were added.
+
 ## Modifying the Pipeline
 
 ### Adding New YouTube Channels
