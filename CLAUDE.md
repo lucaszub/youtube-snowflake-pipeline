@@ -237,7 +237,7 @@ GitHub Push → CI Workflow → Build Docker → Push to ACR → CD Workflow →
 #### CI Workflow (`.github/workflows/ci.yml`)
 
 **Triggers:**
-- Push sur `main` avec changements dans: `pipelines/`, `Dockerfile`, `requirements.txt`, `docker-compose.yml`
+- Push sur `main` avec changements dans: `pipelines/`, `Dockerfile`, `requirements.txt`, `docker-compose.yml`, `.github/workflows/`
 - Pull requests vers `main`
 
 **Actions:**

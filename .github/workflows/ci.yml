@@ -9,6 +9,7 @@ on:
       - 'requirements.txt'
       - 'docker-compose.yml'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/cd.yml'
   pull_request:
     branches: [main]
     paths:
@@ -16,6 +17,8 @@ on:
       - 'Dockerfile'
       - 'requirements.txt'
       - 'docker-compose.yml'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/cd.yml'
 
 env:
   IMAGE_NAME: prefect-worker
