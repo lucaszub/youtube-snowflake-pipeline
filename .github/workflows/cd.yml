@@ -45,8 +45,11 @@ jobs:
 
             echo "🚀 Starting deployment..."
 
-            # Navigate to project directory
-            cd ~/prefect || { echo "❌ Project directory not found"; exit 1; }
+            # Create project directory if it doesn't exist
+            mkdir -p ~/prefect
+            cd ~/prefect
+
+            echo "📁 Working directory: $(pwd)"
 
             # Log in to Azure Container Registry
             echo "🔐 Logging in to ACR..."
@@ -157,22 +160,40 @@ jobs:
           script: |
             cd ~/prefect
 
+            # Wait a bit more for services to fully start
+            echo "⏳ Waiting for services to stabilize..."
+            sleep 10
+
             # Check if all containers are running
+            echo "📊 Checking container status..."
+            docker compose -f docker-compose.prod.yml ps
+
             if docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
               echo "✅ Containers are running"
             else
               echo "❌ Some containers are not running"
-              docker compose -f docker-compose.prod.yml ps
+              docker compose -f docker-compose.prod.yml logs --tail=100
               exit 1
             fi
 
-            # Check Prefect API health
-            if curl -f http://localhost:4200/api/health; then
-              echo "✅ Prefect API is healthy"
-            else
-              echo "❌ Prefect API health check failed"
-              exit 1
-            fi
+            # Check Prefect API health (with retries)
+            echo "🏥 Checking Prefect API health..."
+            max_retries=5
+            retry_count=0
+            while [ $retry_count -lt $max_retries ]; do
+              if curl -f -s http://localhost:4200/api/health > /dev/null; then
+                echo "✅ Prefect API is healthy"
+                exit 0
+              else
+                retry_count=$((retry_count + 1))
+                echo "⏳ Attempt $retry_count/$max_retries: API not ready yet, waiting..."
+                sleep 10
+              fi
+            done
+
+            echo "❌ Prefect API health check failed after $max_retries attempts"
+            docker compose -f docker-compose.prod.yml logs prefect-server --tail=100
+            exit 1
 
       - name: Notify deployment status
         if: always()
