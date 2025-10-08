@@ -51,6 +51,9 @@ services:
     container_name: prefect-worker
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
+      # Azure Blob Storage credentials
+      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
+      BLOB_CONTAINER_NAME: ${BLOB_CONTAINER_NAME:-raw}
     depends_on:
       prefect-server:
         condition: service_healthy

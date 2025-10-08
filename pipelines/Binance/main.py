@@ -30,11 +30,30 @@ def extract_binance_data():
     return df
 
 
-@task(retries=1, retry_delay_seconds=30)
-def upload_to_blob():
-    """Upload vers Azure Blob Storage"""
-    # TODO: Implémenter l'upload vers Blob (prochaine étape)
-    return "upload_skipped"
+@task(retries=2, retry_delay_seconds=30)
+def upload_to_blob(df):
+    """
+    Upload DataFrame vers Azure Blob Storage en format Parquet
+
+    Args:
+        df: DataFrame Binance à uploader
+
+    Returns:
+        Dict avec métadonnées d'upload (blob_path, size, timestamp, etc.)
+    """
+    from azure_blob_uploader import upload_binance_to_blob
+
+    print(f"\n📤 Starting Azure Blob upload...")
+    print(f"  📊 DataFrame shape: {df.shape}")
+
+    result = upload_binance_to_blob(df)
+
+    print(f"\n✅ Blob upload completed:")
+    print(f"  📁 Path: {result['blob_path']}")
+    print(f"  💾 Size: {result['size_kb']} KB")
+    print(f"  📊 Rows uploaded: {result['row_count']}")
+
+    return result
 
 
 @task(retries=1, retry_delay_seconds=30)
@@ -47,32 +66,40 @@ def load_to_snowflake():
 @flow(name="Pipeline Binance Real-Time", log_prints=True)
 def pipeline_binance():
     """
-    Pipeline Binance - Extraction temps réel
+    Pipeline Binance - Extraction + Upload vers Azure Blob
 
-    Phase actuelle: Extraction uniquement (GET data)
-    Binance API → DataFrame pandas
+    Phase actuelle: Phase 2 - Extract & Upload
+    Binance API → DataFrame pandas → Azure Blob Storage (Parquet)
 
     Prochaines étapes:
-    - Upload vers Azure Blob Storage
-    - Load vers Snowflake
-    - Visualisation Next.js
+    - Load vers Snowflake (Phase 3)
+    - Visualisation 
+    Next.js (Phase 4)
     """
+    # Étape 1: Extract data from Binance
     df = extract_binance_data()
 
-    # Étape 2: Upload vers Blob (à implémenter plus tard)
-    # blob_result = upload_to_blob(df)
+    # Étape 2: Upload vers Azure Blob Storage
+    blob_result = upload_to_blob(df)
 
     # Étape 3: Load vers Snowflake (à implémenter plus tard)
     # snowflake_result = load_to_snowflake()
 
-    return df
+    return {
+        'extraction': {
+            'rows': len(df),
+            'symbols': df['symbol'].tolist() if 'symbol' in df.columns else []
+        },
+        'upload': blob_result
+    }
 
 
 if __name__ == "__main__":
     result = pipeline_binance()
 
     print("\n" + "="*80)
-    print("📋 FINAL RESULT - DataFrame Summary")
+    print("📋 FINAL RESULT - Pipeline Summary")
     print("="*80)
-    print(result.to_string())
+    print(f"Extraction: {result['extraction']}")
+    print(f"Upload: {result['upload']}")
     print("\n✅ Pipeline completed successfully!")

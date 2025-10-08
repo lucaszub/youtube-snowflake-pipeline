@@ -4,14 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Claude Code Guidelines
 
-**IMPORTANT**: Always use GitHub CLI (`gh`) to interact with GitHub:
+**IMPORTANT**: Always use CLI tools to interact with cloud services:
 
+### GitHub CLI (`gh`)
 - View workflow runs: `gh run list`, `gh run view <run-id> --log`
 - Check PR status: `gh pr list`, `gh pr view <pr-number>`
 - View issues: `gh issue list`, `gh issue view <issue-number>`
 - Repository info: `gh repo view`
 - Never manually construct GitHub URLs or web interface links
 - Use `gh` commands for all GitHub-related queries and operations
+
+### Azure CLI (`az`)
+- View storage accounts: `az storage account list --output table`
+- View containers: `az storage container list --account-name <account> --output table`
+- View blobs: `az storage blob list --container-name <container> --account-name <account> --output table`
+- View ACR repositories: `az acr repository list --name <registry> --output table`
+- View ACR tags: `az acr repository show-tags --name <registry> --repository <repo> --output table`
+- Monitor ACR: `az acr repository show --name <registry> --repository <repo>`
+- Never manually construct Azure portal URLs
+- Use `az` commands for all Azure-related queries and operations
 
 ## Project Overview
 
@@ -37,24 +48,30 @@ pipelines/
 ### Pipeline Flow
 
 ```
-Binance API → pandas DataFrame → Logs
-     ↓              ↓                ↓
-REST API      Data extraction    Console output
+Binance API → pandas DataFrame → Azure Blob Storage (Parquet)
+     ↓              ↓                        ↓
+REST API      Data extraction         binance/YYYY/MM/DD/*.parquet
 ```
 
 ### Key Components
 
-1. **main.py** - Main Prefect flow orchestrating the extraction:
+1. **main.py** - Main Prefect flow orchestrating the pipeline:
 
    - `extract_binance_data()`: Fetches real-time crypto data from Binance API
-   - Currently in Phase 1: extraction only
+   - `upload_to_blob()`: Uploads DataFrame to Azure Blob Storage in Parquet format
+   - Currently in Phase 2: extraction + upload
 
 2. **binance_extractor.py** - Binance API client
 
    - `BinanceExtractor` class: Fetches ticker data, order book, and recent trades
    - `get_binance_data()`: Main function that extracts data for configured symbols
 
-3. **deploy.py** - Prefect deployment configuration
+3. **azure_blob_uploader.py** - Azure Blob Storage uploader
+   - `AzureBlobUploader` class: Handles Parquet conversion and Azure Blob upload
+   - `upload_binance_to_blob()`: Convenience function for uploading
+   - Date-partitioned storage: `binance/YYYY/MM/DD/binance_data_YYYYMMDD_HHMMSS.parquet`
+
+4. **deploy.py** - Prefect deployment configuration
    - Defines scheduled execution (every 5 minutes: _/5 _ \* \* \*)
    - Production deployment with tags and versioning
 
@@ -73,10 +90,13 @@ pip install -r requirements.txt
 
 ### Environment Configuration
 
-Create `.env` file (optional, not required for Binance pipeline):
+Create `.env` file with Azure Blob Storage credentials:
 
 ```env
-# Currently no environment variables needed
+# Azure Blob Storage (required for Phase 2)
+AZURE_STORAGE_CONNECTION_STRING=<your-connection-string>
+BLOB_CONTAINER_NAME=raw
+
 # Binance Public API doesn't require authentication
 ```
 
@@ -143,12 +163,18 @@ docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
   - Order book (best bid/ask, spread)
   - Recent trades (last 5 trades average price)
 
-**Current Phase**: Extraction only (Phase 1)
+**Current Phase**: Extraction + Azure Blob Upload (Phase 2 - COMPLETED ✅)
 
-- **Phase 2 (todo)**: Upload to Azure Blob Storage
-- **Phase 3 (todo)**: Load to Snowflake
+- ✅ **Phase 1 (completed)**: Extract data from Binance API
+- ✅ **Phase 2 (completed)**: Upload to Azure Blob Storage (Parquet with date partitioning)
+  - Implemented `azure_blob_uploader.py` with `AzureBlobUploader` class
+  - Conversion DataFrame → Parquet format
+  - Partitioning par date: `binance/YYYY/MM/DD/binance_data_YYYYMMDD_HHMMSS.parquet`
+  - Upload automatique vers Azure Blob Storage container "raw"
+  - Intégration dans le flow Prefect `main.py`
+- **Phase 3 (todo)**: Load to Snowflake with COPY INTO
 - **Phase 4 (todo)**: Transform in Snowflake (dbt)
-- **Phase 4 (todo)**: Next.js visualization dashboard
+- **Phase 5 (todo)**: Next.js visualization dashboard
 
 **Run locally**:
 
@@ -314,22 +340,89 @@ gh run list --workflow=cd.yml --limit=1
 gh run rerun <run-id>
 ```
 
+### Monitoring Azure Resources
+
+**IMPORTANT**: Always use Azure CLI (`az`) for monitoring Azure resources.
+
+**Azure Container Registry (ACR):**
+
+```bash
+# Voir tous les repositories
+az acr repository list --name <registry> --output table
+
+# Voir les tags d'une image
+az acr repository show-tags --name <registry> --repository prefect-worker --output table --orderby time_desc
+
+# Voir les détails d'une image
+az acr repository show --name <registry> --repository prefect-worker
+
+# Voir les manifests d'une image
+az acr repository show-manifests --name <registry> --repository prefect-worker --output table
+
+# Nettoyer les anciennes images (garder les 5 dernières)
+az acr repository show-tags --name <registry> --repository prefect-worker --orderby time_desc --output tsv | tail -n +6 | xargs -I {} az acr repository delete --name <registry> --image prefect-worker:{} --yes
+```
+
+**Azure Blob Storage:**
+
+```bash
+# Lister les comptes de stockage
+az storage account list --output table
+
+# Lister les containers
+az storage container list --account-name <account> --output table
+
+# Lister les blobs dans un container (avec partitionnement par date)
+az storage blob list --container-name raw --account-name <account> --prefix binance/ --output table
+
+# Voir les blobs récents (aujourd'hui)
+az storage blob list --container-name raw --account-name <account> --prefix binance/$(date +%Y/%m/%d)/ --output table
+
+# Voir la taille totale d'un container
+az storage blob list --container-name raw --account-name <account> --query "[].properties.contentLength" --output tsv | awk '{s+=$1} END {print s/1024/1024 " MB"}'
+
+# Télécharger un blob pour inspection
+az storage blob download --container-name raw --name <blob-path> --file ./local-file.parquet --account-name <account>
+
+# Voir les propriétés d'un blob
+az storage blob show --container-name raw --name <blob-path> --account-name <account>
+```
+
+**Configuration de l'authentification Azure CLI:**
+
+```bash
+# Login interactif
+az login
+
+# Login avec service principal (pour CI/CD)
+az login --service-principal -u <client-id> -p <client-secret> --tenant <tenant-id>
+
+# Définir la subscription par défaut
+az account set --subscription <subscription-id>
+
+# Vérifier le compte connecté
+az account show
+```
+
 ### Rollback en Cas d'Erreur
 
 Si un déploiement échoue, vous pouvez rollback vers une version précédente:
 
 ```bash
-# 1. Se connecter au VPS
+# 1. Voir les tags disponibles dans ACR
+az acr repository show-tags --name <registry> --repository prefect-worker --output table --orderby time_desc
+
+# 2. Se connecter au VPS
 ssh user@vps-host
 cd ~/prefect
 
-# 2. Lister les images disponibles
+# 3. Lister les images disponibles localement
 docker images | grep prefect-worker
 
-# 3. Modifier docker-compose.prod.yml pour utiliser un tag spécifique
+# 4. Modifier docker-compose.prod.yml pour utiliser un tag spécifique
 # Remplacer :latest par :main-<old-sha>
 
-# 4. Redémarrer
+# 5. Redémarrer
 docker compose -f docker-compose.prod.yml up -d
 ```
 
@@ -338,6 +431,7 @@ docker compose -f docker-compose.prod.yml up -d
 **Le workflow CI échoue:**
 - Vérifier que les secrets ACR sont correctement configurés
 - Vérifier que le Dockerfile build localement: `docker build -t test .`
+- Vérifier l'accès à ACR: `az acr login --name <registry>`
 
 **Le workflow CD échoue:**
 - Vérifier la connexion SSH: `ssh -i ~/.ssh/key user@vps-host`
@@ -351,9 +445,68 @@ docker compose -f docker-compose.prod.yml logs
 docker compose -f docker-compose.prod.yml ps
 ```
 
+**Pipeline Binance ne upload pas vers Azure Blob:**
+```bash
+# Vérifier que le container existe
+az storage container show --name raw --account-name <account>
+
+# Vérifier les credentials dans .env
+cat .env | grep AZURE_STORAGE_CONNECTION_STRING
+
+# Tester l'upload manuellement
+python pipelines/Binance/main.py
+
+# Vérifier les blobs uploadés aujourd'hui
+az storage blob list --container-name raw --account-name <account> --prefix binance/$(date +%Y/%m/%d)/ --output table
+```
+
+**ACR quota atteint:**
+```bash
+# Voir l'utilisation du registry
+az acr show-usage --name <registry> --output table
+
+# Nettoyer les anciennes images
+az acr repository show-tags --name <registry> --repository prefect-worker --orderby time_desc --output tsv | tail -n +6 | xargs -I {} az acr repository delete --name <registry> --image prefect-worker:{} --yes
+```
+
+## Vérifier les Données Uploadées
+
+**Voir les fichiers Parquet uploadés aujourd'hui:**
+
+```bash
+az storage blob list --container-name raw --account-name <account> --prefix binance/$(date +%Y/%m/%d)/ --output table
+```
+
+**Télécharger et inspecter un fichier Parquet:**
+
+```bash
+# Télécharger
+az storage blob download --container-name raw --name binance/2025/10/08/binance_data_20251008_143022.parquet --file ./test.parquet --account-name <account>
+
+# Inspecter avec Python
+python -c "import pandas as pd; df=pd.read_parquet('./test.parquet'); print(df.head()); print(df.info())"
+```
+
+**Structure des données dans le Parquet:**
+
+Les fichiers contiennent les colonnes suivantes pour chaque symbol:
+- `symbol`: Paire de trading (ex: BTCUSDT)
+- `price`: Prix actuel
+- `price_change_percent`: Variation % sur 24h
+- `volume`: Volume 24h
+- `high_24h`: Prix max 24h
+- `low_24h`: Prix min 24h
+- `bid_price`: Meilleur prix d'achat
+- `ask_price`: Meilleur prix de vente
+- `spread`: Spread bid-ask
+- `avg_trade_price`: Prix moyen des 5 derniers trades
+- `timestamp`: Timestamp de l'extraction
+
 ## Next Steps (Roadmap)
 
-1. **Phase 2**: Implement Azure Blob Storage upload (Parquet format)
-2. **Phase 3**: Implement Snowflake loading with COPY INTO
-3. **Phase 4**: Create Next.js dashboard for real-time visualization
-4. **Phase 5**: Add data quality checks and alerting
+1. ✅ **Phase 1 (completed)**: Extract data from Binance API
+2. ✅ **Phase 2 (completed)**: Upload to Azure Blob Storage (Parquet format with date partitioning)
+3. **Phase 3 (next)**: Implement Snowflake loading with COPY INTO
+4. **Phase 4**: Transform in Snowflake (dbt)
+5. **Phase 5**: Create Next.js dashboard for real-time visualization
+6. **Phase 6**: Add data quality checks and alerting

@@ -6,6 +6,10 @@ requests>=2.31.0
 
 # Data processing
 pandas>=2.0.0
+pyarrow>=14.0.0
+
+# Azure Storage
+azure-storage-blob>=12.19.0
 
 # Utilitaires
 python-dotenv>=1.0.0

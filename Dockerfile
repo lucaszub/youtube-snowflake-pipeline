@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 # Invalidate cache for pipelines copy (force fresh copy)
 ARG CACHE_BUST=1
 
-# Copier le pipeline Binance
+# Copier le pipeline Binance (tous les fichiers)
 COPY pipelines/Binance/ /app/pipelines/Binance/
 
 # Variables d'environnement
