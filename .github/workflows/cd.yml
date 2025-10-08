@@ -125,13 +125,21 @@ jobs:
                 driver: bridge
             EOF
 
+            # Detect docker compose command (v1 or v2)
+            if command -v docker-compose &> /dev/null; then
+              COMPOSE_CMD="docker-compose"
+            else
+              COMPOSE_CMD="docker compose"
+            fi
+            echo "Using compose command: $COMPOSE_CMD"
+
             # Stop and remove old containers
             echo "🛑 Stopping old containers..."
-            docker compose -f docker-compose.prod.yml down || true
+            $COMPOSE_CMD -f docker-compose.prod.yml down || true
 
             # Start new containers
             echo "▶️  Starting new containers..."
-            docker compose -f docker-compose.prod.yml up -d
+            $COMPOSE_CMD -f docker-compose.prod.yml up -d
 
             # Wait for services to be healthy
             echo "⏳ Waiting for services to be healthy..."
@@ -139,11 +147,11 @@ jobs:
 
             # Check container status
             echo "📊 Container status:"
-            docker compose -f docker-compose.prod.yml ps
+            $COMPOSE_CMD -f docker-compose.prod.yml ps
 
             # Show logs
             echo "📋 Recent logs:"
-            docker compose -f docker-compose.prod.yml logs --tail=50 prefect-worker
+            $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=50 prefect-worker
 
             # Cleanup old images
             echo "🧹 Cleaning up old images..."
@@ -160,19 +168,26 @@ jobs:
           script: |
             cd ~/prefect
 
+            # Detect docker compose command
+            if command -v docker-compose &> /dev/null; then
+              COMPOSE_CMD="docker-compose"
+            else
+              COMPOSE_CMD="docker compose"
+            fi
+
             # Wait a bit more for services to fully start
             echo "⏳ Waiting for services to stabilize..."
             sleep 10
 
             # Check if all containers are running
             echo "📊 Checking container status..."
-            docker compose -f docker-compose.prod.yml ps
+            $COMPOSE_CMD -f docker-compose.prod.yml ps
 
-            if docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+            if $COMPOSE_CMD -f docker-compose.prod.yml ps | grep -q "Up"; then
               echo "✅ Containers are running"
             else
               echo "❌ Some containers are not running"
-              docker compose -f docker-compose.prod.yml logs --tail=100
+              $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=100
               exit 1
             fi
 
@@ -192,7 +207,7 @@ jobs:
             done
 
             echo "❌ Prefect API health check failed after $max_retries attempts"
-            docker compose -f docker-compose.prod.yml logs prefect-server --tail=100
+            $COMPOSE_CMD -f docker-compose.prod.yml logs prefect-server --tail=100
             exit 1
 
       - name: Notify deployment status
