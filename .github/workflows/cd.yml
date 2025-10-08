@@ -147,6 +147,10 @@ jobs:
             echo "📋 Recent logs:"
             $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=50 prefect-worker
 
+            # Deploy Prefect pipeline
+            echo "🚀 Deploying Prefect pipeline..."
+            $COMPOSE_CMD -f docker-compose.prod.yml exec -T prefect-worker python /app/pipelines/Binance/deploy.py
+
             # Cleanup old images
             echo "🧹 Cleaning up old images..."
             docker image prune -af --filter "until=72h" || true

@@ -261,8 +261,9 @@ GitHub Push → CI Workflow → Build Docker → Push to ACR → CD Workflow →
 3. Pull de la dernière image
 4. Mise à jour de `docker-compose.prod.yml`
 5. Redémarrage des services
-6. Health check des conteneurs
-7. Nettoyage des anciennes images
+6. Déploiement du pipeline Prefect
+7. Health check des conteneurs
+8. Nettoyage des anciennes images
 
 ### Secrets GitHub Requis
 
