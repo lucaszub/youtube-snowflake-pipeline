@@ -28,8 +28,7 @@ Ce dossier contient les workflows CI/CD pour le déploiement automatisé du pipe
 **Objectif:** Déployer l'application sur le VPS après le build réussi.
 
 **Déclencheurs:**
-- Après succès du workflow CI
-- Push direct sur `main`
+- **Uniquement** après succès du workflow CI (workflow_run)
 
 **Étapes:**
 1. Connexion SSH au VPS
@@ -91,9 +90,9 @@ git commit -m "feat: update pipeline"
 git push origin main
 ```
 
-Les workflows s'exécuteront automatiquement:
-1. **CI** build et push l'image
-2. **CD** déploie sur le VPS
+Les workflows s'exécuteront automatiquement en séquence:
+1. **CI** build et push l'image vers ACR
+2. **CD** attend la fin du CI, puis déploie sur le VPS (uniquement si CI réussit)
 
 ### Monitoring
 

@@ -253,8 +253,7 @@ GitHub Push → CI Workflow → Build Docker → Push to ACR → CD Workflow →
 #### CD Workflow (`.github/workflows/cd.yml`)
 
 **Triggers:**
-- Après succès du CI workflow
-- Push direct sur `main`
+- **Uniquement** après succès du CI workflow (workflow_run)
 
 **Actions:**
 1. Connexion SSH au VPS
