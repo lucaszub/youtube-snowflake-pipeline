@@ -133,9 +133,12 @@ jobs:
             fi
             echo "Using compose command: $COMPOSE_CMD"
 
-            # Stop and remove old containers
+            # Stop and remove old containers (force cleanup if needed)
             echo "🛑 Stopping old containers..."
             $COMPOSE_CMD -f docker-compose.prod.yml down || true
+
+            # Force remove any remaining containers with the same names
+            docker rm -f prefect-postgres prefect-server prefect-worker 2>/dev/null || true
 
             # Start new containers
             echo "▶️  Starting new containers..."
