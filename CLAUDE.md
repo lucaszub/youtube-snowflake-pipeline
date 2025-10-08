@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Claude Code Guidelines
 
 **IMPORTANT**: Always use GitHub CLI (`gh`) to interact with GitHub:
+
 - View workflow runs: `gh run list`, `gh run view <run-id> --log`
 - Check PR status: `gh pr list`, `gh pr view <pr-number>`
 - View issues: `gh issue list`, `gh issue view <issue-number>`
@@ -14,85 +15,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Collection of data pipelines orchestrated with Prefect 3.x.
-
-### Pipelines disponibles:
-
-1. **YouTube Pipeline** - Extrait métriques YouTube → Azure Blob → Snowflake → dbt
-2. **GitHub Trending Pipeline** - Track repos trending par technologie → Azure Blob → Snowflake
-3. **Binance Pipeline** - Extraction données crypto en temps réel (exécution toutes les 5 minutes)
+Pipeline de données crypto orchestré avec Prefect 3.x qui extrait les données en temps réel depuis l'API Binance.
 
 **Tech Stack:**
 
 - **Orchestration**: Prefect 3.x (workflow orchestration with scheduling)
-- **Data Sources**: YouTube Data API v3, GitHub API, Binance API
-- **Storage**: Azure Blob Storage (Parquet files)
-- **Data Warehouse**: Snowflake
-- **Transformation**: dbt (data build tool)
+- **Data Source**: Binance Public REST API (no API key required)
+- **Data Processing**: pandas
+- **Deployment**: Docker-based deployment with docker-compose
+- **Backend**: PostgreSQL for Prefect metadata
 
 **Project Structure:**
 
 ```
 pipelines/
-  youtube/     - Pipeline YouTube (daily 12h ART)
-  github/      - Pipeline GitHub Trending (daily 6h ART)
   Binance/     - Pipeline Binance crypto real-time (every 5 minutes)
 ```
-
-**Deployment:**
-
-- Docker-based deployment with docker-compose
-- PostgreSQL backend for Prefect metadata
-- Scheduled execution (daily at 12:00 PM America/Argentina/Buenos_Aires)
-- CI/CD with GitHub Actions → Azure Container Registry
-- Automated deployment via GitHub Actions workflows
 
 ## Architecture
 
 ### Pipeline Flow
 
 ```
-YouTube API → Azure Blob Storage → Snowflake → dbt transformations
-     ↓              ↓                   ↓            ↓
-youtube_extractor  Parquet files    COPY INTO   Analytics models
+Binance API → pandas DataFrame → Logs
+     ↓              ↓                ↓
+REST API      Data extraction    Console output
 ```
 
 ### Key Components
 
-1. **main.py** - Main Prefect flow orchestrating 3 tasks:
+1. **main.py** - Main Prefect flow orchestrating the extraction:
 
-   - `api_to_blob()`: Extracts YouTube data and uploads to Blob Storage
-   - `copy_into()`: Loads Parquet files from Blob into Snowflake raw table
-   - `dbt_run()`: Executes dbt transformations
+   - `extract_binance_data()`: Fetches real-time crypto data from Binance API
+   - Currently in Phase 1: extraction only
 
-2. **youtube_extractor.py** - YouTube API client
+2. **binance_extractor.py** - Binance API client
 
-   - `YouTubeSearcher` class: Fetches channel and video metadata
-   - `extract_and_upload()`: Main function that extracts from configured channels and uploads as Parquet
+   - `BinanceExtractor` class: Fetches ticker data, order book, and recent trades
+   - `get_binance_data()`: Main function that extracts data for configured symbols
 
-3. **snowflake_connector.py** - Snowflake connection manager
-
-   - Context manager for safe connection handling
-   - Uses credentials from environment variables
-
-4. **deploy.py** - Prefect deployment configuration
-   - Defines scheduled execution (daily at 12:00 PM America/Argentina/Buenos_Aires)
+3. **deploy.py** - Prefect deployment configuration
+   - Defines scheduled execution (every 5 minutes: _/5 _ \* \* \*)
    - Production deployment with tags and versioning
-
-### dbt Project Structure (`youtube_dbt/`)
-
-**Models hierarchy:**
-
-- `staging/stg_youtube_videos.sql`: Cleaned raw data from `YOUTUBE_RAW.INGESTION.YOUTUBE_VIDEOS`
-- `analytics/`:
-  - `dim_channel.sql`: Channel dimension (deduped by channel_id)
-  - `dim_video.sql`: Video dimension (video metadata)
-  - `fct_video_snapshot.sql`: **Incremental** fact table tracking video metrics over time (unique_key: video_id + loaded_at)
-  - `fct_video_latest.sql`: Latest snapshot per video
-  - `fct_video_engagement.sql`: Engagement metrics (like_rate, comment_rate)
-  - `fact_video.sql`: Core fact table
-
-**Important**: `fct_video_snapshot` uses `unique_key=['video_id', 'loaded_at']` to track metrics evolution. If you need to reload everything, use `dbt run --full-refresh --select fct_video_snapshot`.
 
 ## Development Commands
 
@@ -109,20 +73,11 @@ pip install -r requirements.txt
 
 ### Environment Configuration
 
-Create `.env` file with:
+Create `.env` file (optional, not required for Binance pipeline):
 
 ```env
-YOUTUBE_API_KEY=your_key
-AZURE_STORAGE_CONNECTION_STRING=your_connection_string
-BLOB_CONTAINER_NAME=raw
-SNOWFLAKE_ACCOUNT=your_account
-SNOWFLAKE_USER=your_user
-SNOWFLAKE_PASSWORD=your_password
-SNOWFLAKE_WAREHOUSE=COMPUTE_WH
-SNOWFLAKE_DATABASE=YOUTUBE_RAW
-SNOWFLAKE_SCHEMA=INGESTION
-SNOWFLAKE_ROLE=ACCOUNTADMIN
-DBT_PROJECT_DIR=/home/prefect/prefect-production/youtube-snowflake-pipeline/youtube_dbt  # Production VPS path
+# Currently no environment variables needed
+# Binance Public API doesn't require authentication
 ```
 
 ### Running Locally
@@ -130,33 +85,16 @@ DBT_PROJECT_DIR=/home/prefect/prefect-production/youtube-snowflake-pipeline/yout
 **Run complete pipeline:**
 
 ```bash
-python main.py
+python pipelines/Binance/main.py
 ```
 
-**Test Snowflake connection:**
+**Test Binance extractor directly:**
 
 ```bash
-python snowflake_connector.py
-```
-
-**Run dbt only:**
-
-```bash
-cd youtube_dbt
-dbt run                                    # Run all models
-dbt run --select stg_youtube_videos        # Run specific model
-dbt run --select tag:youtube               # Run by tag
-dbt run --full-refresh                     # Full rebuild (drops tables first)
-dbt test                                   # Run data quality tests
+python pipelines/Binance/binance_extractor.py
 ```
 
 ### Prefect Development
-
-**Local testing (temporary server):**
-
-```bash
-python main.py  # Starts temporary Prefect server automatically
-```
 
 **Docker-based deployment (recommended):**
 
@@ -167,9 +105,7 @@ docker compose up -d
 # 2. Access Prefect UI
 # http://localhost:4200
 
-# 3. Deploy flows
-docker compose exec prefect-worker python /app/pipelines/youtube/deploy.py
-docker compose exec prefect-worker python /app/pipelines/github/deploy.py
+# 3. Deploy flow
 docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
 
 # 4. View logs
@@ -183,63 +119,23 @@ docker compose down
 
 ```bash
 # 1. Modify code locally
-vim pipelines/github/main.py
+vim pipelines/Binance/main.py
 
 # 2. Rebuild & restart
 docker compose up -d --build
 
-# 3. Redeploy flows
-docker compose exec prefect-worker python /app/pipelines/github/deploy.py
+# 3. Redeploy flow
+docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
 
 # 4. Test in UI
 # http://localhost:4200 → Deployments → Quick Run
 ```
 
-## Snowflake Configuration
-
-The pipeline expects:
-
-- Database: `YOUTUBE_RAW`
-- Schema: `INGESTION`
-- Table: `YOUTUBE_VIDEOS` (target for COPY INTO)
-- External Stage: `YOUTUBE_BLOB_STAGE` pointing to Azure Blob Storage
-- File Format: `PARQUET_FORMAT`
-
-The COPY INTO command in `main.py` line 30-36 loads from the external stage.
-
-## Important Notes
-
-### YouTube API Quota
-
-- Default quota: 10,000 units/day
-- Resets at midnight Pacific Time
-- If quota exceeded, comment out `api_to_blob()` call in `main.py` line 83 and run with existing Blob files
-
-### dbt Incremental Models
-
-- `fct_video_snapshot` is incremental with `unique_key=['video_id', 'loaded_at']`
-- On each run, only new combinations are inserted
-- To reload everything: `dbt run --full-refresh --select fct_video_snapshot`
-- If model is out of sync with source, drop the table in Snowflake and run `dbt run`
-
-### CI/CD & Deployment
-
-- See `CI_CD_GUIDE.md` for complete CI/CD setup
-- Docker images automatically built and pushed to Azure Container Registry
-- GitHub Actions workflows in `.github/workflows/`:
-  - `ci.yml` - Build & push Docker image to ACR
-  - `cd.yml` - Deploy to production VPS
-- Setup script: `scripts/setup_azure_acr.sh` to create Azure Container Registry
-- Secrets required in GitHub: `ACR_LOGIN_SERVER`, `ACR_USERNAME`, `ACR_PASSWORD`
-
-**Docker Cache Management:**
-
-The Dockerfile uses a `CACHE_BUST` build argument to force invalidation of Docker layer cache when pipeline files change. This ensures that new pipeline directories (like `Binance/`) are properly included in the Docker image even when GitHub Actions cache is enabled. Without this, the `COPY pipelines/` layer could use stale cached data from before new files were added.
-
-### Binance Pipeline
+## Binance Pipeline Details
 
 **Pipeline Binance Real-Time** (`pipelines/Binance/`):
-- **Schedule**: Every 5 minutes (*/5 * * * *)
+
+- **Schedule**: Every 5 minutes (_/5 _ \* \* \*)
 - **Data Source**: Binance Public REST API (no API key required)
 - **Symbols tracked**: BTCUSDT, ETHUSDT, BNBUSDT
 - **Data extracted**:
@@ -247,37 +143,33 @@ The Dockerfile uses a `CACHE_BUST` build argument to force invalidation of Docke
   - Order book (best bid/ask, spread)
   - Recent trades (last 5 trades average price)
 
-**Files**:
-- `main.py`: Prefect flow orchestrating extraction task
-- `binance_extractor.py`: BinanceExtractor class for API calls
-- `deploy.py`: Prefect deployment configuration (5-minute schedule)
+**Current Phase**: Extraction only (Phase 1)
 
-**Current Phase**: Extraction only (phase 1)
-- Phase 2 (todo): Upload to Azure Blob Storage
-- Phase 3 (todo): Load to Snowflake
-- Phase 4 (todo): Next.js visualization dashboard
+- **Phase 2 (todo)**: Upload to Azure Blob Storage
+- **Phase 3 (todo)**: Load to Snowflake
+- **Phase 4 (todo)**: Transform in Snowflake (dbt)
+- **Phase 4 (todo)**: Next.js visualization dashboard
 
 **Run locally**:
+
 ```bash
 python pipelines/Binance/main.py
 ```
 
 **Deploy to Prefect**:
+
 ```bash
 docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
 ```
 
 ## Modifying the Pipeline
 
-### Adding New YouTube Channels
+### Adding New Crypto Symbols
 
-Edit `youtube_extractor.py` line ~87, add channel IDs to the list:
+Edit `pipelines/Binance/main.py` line 22, add symbols to the list:
 
 ```python
-channel_ids = [
-    "UCoOae5nYA7VqaXzerajD0lg",
-    "NEW_CHANNEL_ID",
-]
+symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
 ```
 
 ### Changing Schedule
@@ -285,41 +177,183 @@ channel_ids = [
 Edit `deploy.py` line 13:
 
 ```python
-cron="0 12 * * *",  # Daily at 12:00 PM
-cron="0 */6 * * *", # Every 6 hours
+cron="*/5 * * * *",  # Every 5 minutes
+cron="*/15 * * * *", # Every 15 minutes
+cron="0 * * * *",    # Every hour
 ```
 
 Then redeploy:
 
 ```bash
-python deploy.py
-systemctl restart prefect-worker  # On VPS
+docker compose exec prefect-worker python /app/pipelines/Binance/deploy.py
 ```
-
-### Adding New dbt Models
-
-Place in appropriate folder:
-
-- `youtube_dbt/models/staging/` for source cleaning
-- `youtube_dbt/models/analytics/` for business logic
-
-Tag models for selective execution:
-
-```sql
-{{ config(
-    materialized='table',
-    tags=['youtube', 'daily']
-) }}
-```
-
-Then run: `dbt run --select tag:youtube`
 
 ## Common Issues
 
-**"No videos extracted from any channel"**: YouTube API quota exceeded, wait for reset or use new API key
-
-**dbt models out of sync**: Run `dbt run --full-refresh` or drop tables in Snowflake
-
-**Snowflake connection fails**: Verify `.env` credentials and network access to Snowflake
+**Binance API rate limiting**: Free API has rate limits (1200 requests/minute for weight). Current implementation respects limits with 0.2s delay between symbols.
 
 **Worker not picking up scheduled runs**: Ensure worker is running with correct work pool (`default-pool`)
+
+**Docker build fails**: Make sure you have the latest requirements.txt and Dockerfile changes
+
+## CI/CD Pipeline
+
+Le projet utilise GitHub Actions pour l'intégration continue (CI) et le déploiement continu (CD) vers Azure Container Registry (ACR) et un VPS.
+
+### Architecture CI/CD
+
+```
+GitHub Push → CI Workflow → Build Docker → Push to ACR → CD Workflow → Deploy to VPS
+```
+
+### Workflows
+
+#### CI Workflow (`.github/workflows/ci.yml`)
+
+**Triggers:**
+- Push sur `main` avec changements dans: `pipelines/`, `Dockerfile`, `requirements.txt`, `docker-compose.yml`
+- Pull requests vers `main`
+
+**Actions:**
+1. Build de l'image Docker `prefect-worker`
+2. Tag avec commit SHA et `latest`
+3. Push vers Azure Container Registry
+
+**Tags créés:**
+- `main-<sha>` pour les commits sur main
+- `pr-<number>` pour les pull requests
+- `latest` pour la branche principale
+
+#### CD Workflow (`.github/workflows/cd.yml`)
+
+**Triggers:**
+- Après succès du CI workflow
+- Push direct sur `main`
+
+**Actions:**
+1. Connexion SSH au VPS
+2. Login à Azure Container Registry
+3. Pull de la dernière image
+4. Mise à jour de `docker-compose.prod.yml`
+5. Redémarrage des services
+6. Health check des conteneurs
+7. Nettoyage des anciennes images
+
+### Secrets GitHub Requis
+
+Les secrets suivants doivent être configurés dans GitHub (Settings → Secrets and variables → Actions):
+
+```bash
+ACR_LOGIN_SERVER   # URL du registry ACR (ex: myregistry.azurecr.io)
+ACR_USERNAME       # Username ACR
+ACR_PASSWORD       # Password ACR
+VPS_HOST           # IP ou hostname du VPS
+VPS_USER           # Username SSH du VPS
+VPS_SSH_KEY        # Clé privée SSH pour se connecter au VPS
+```
+
+### Configuration du VPS
+
+**Prérequis sur le VPS:**
+
+```bash
+# 1. Installer Docker et Docker Compose
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+
+# 2. Créer le répertoire du projet
+mkdir -p ~/prefect
+cd ~/prefect
+
+# 3. Vérifier que le port 4200 est disponible
+sudo ufw allow 4200/tcp
+```
+
+### Déploiement Manuel (si nécessaire)
+
+Si vous devez déployer manuellement sans CI/CD:
+
+```bash
+# 1. Se connecter au VPS
+ssh user@vps-host
+
+# 2. Aller dans le répertoire
+cd ~/prefect
+
+# 3. Login à ACR
+echo "ACR_PASSWORD" | docker login myregistry.azurecr.io -u ACR_USERNAME --password-stdin
+
+# 4. Pull l'image
+docker pull myregistry.azurecr.io/prefect-worker:latest
+
+# 5. Démarrer les services
+docker compose -f docker-compose.prod.yml up -d
+
+# 6. Vérifier le statut
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f prefect-worker
+```
+
+### Monitoring des Workflows
+
+**Voir les runs:**
+```bash
+gh run list
+gh run view <run-id> --log
+```
+
+**Voir les derniers logs d'un workflow:**
+```bash
+gh run list --workflow=ci.yml --limit=1
+gh run list --workflow=cd.yml --limit=1
+```
+
+**Re-run un workflow failed:**
+```bash
+gh run rerun <run-id>
+```
+
+### Rollback en Cas d'Erreur
+
+Si un déploiement échoue, vous pouvez rollback vers une version précédente:
+
+```bash
+# 1. Se connecter au VPS
+ssh user@vps-host
+cd ~/prefect
+
+# 2. Lister les images disponibles
+docker images | grep prefect-worker
+
+# 3. Modifier docker-compose.prod.yml pour utiliser un tag spécifique
+# Remplacer :latest par :main-<old-sha>
+
+# 4. Redémarrer
+docker compose -f docker-compose.prod.yml up -d
+```
+
+### Troubleshooting
+
+**Le workflow CI échoue:**
+- Vérifier que les secrets ACR sont correctement configurés
+- Vérifier que le Dockerfile build localement: `docker build -t test .`
+
+**Le workflow CD échoue:**
+- Vérifier la connexion SSH: `ssh -i ~/.ssh/key user@vps-host`
+- Vérifier que Docker est installé sur le VPS
+- Vérifier les logs: `gh run view <run-id> --log`
+
+**Les conteneurs ne démarrent pas:**
+```bash
+# Sur le VPS
+docker compose -f docker-compose.prod.yml logs
+docker compose -f docker-compose.prod.yml ps
+```
+
+## Next Steps (Roadmap)
+
+1. **Phase 2**: Implement Azure Blob Storage upload (Parquet format)
+2. **Phase 3**: Implement Snowflake loading with COPY INTO
+3. **Phase 4**: Create Next.js dashboard for real-time visualization
+4. **Phase 5**: Add data quality checks and alerting

@@ -1,25 +1,11 @@
 # Prefect
 prefect>=2.14.0
 
-# Snowflake
-snowflake-connector-python>=3.0.0
-
-# Azure
-azure-functions>=1.17.0
-azure-storage-blob>=12.19.0
-
-# HTTP requests
+# HTTP requests (pour l'API Binance)
 requests>=2.31.0
-
-# dbt (ajouter selon votre warehouse)
-dbt-snowflake>=1.7.0
-
-# YouTube API
-google-api-python-client>=2.0.0
 
 # Data processing
 pandas>=2.0.0
-pyarrow>=14.0.0
 
 # Utilitaires
 python-dotenv>=1.0.0

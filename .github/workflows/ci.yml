@@ -1,23 +1,28 @@
-name: CI - Build & Push to Registry
+name: CI - Build and Push to ACR
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
+    paths:
+      - 'pipelines/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'pipelines/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
 
 env:
-  REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}  # Ex: monregistry.azurecr.io
-  IMAGE_NAME: prefect-pipelines
+  IMAGE_NAME: prefect-worker
 
 jobs:
   build-and-push:
-    name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'  # Ne build que sur push (pas sur PR)
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout code
@@ -33,55 +38,29 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Extract Docker metadata
+      - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}
           tags: |
-            # Tag avec le nom de la branche
             type=ref,event=branch
-            # Tag avec le SHA du commit
-            type=sha,prefix={{branch}}-,format=short
-            # Tag 'latest' pour la branche main
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Generate cache bust value
-        id: cache-bust
-        run: |
-          # Generate hash of pipelines directory to bust cache when content changes
-          HASH=$(find pipelines -type f -exec sha256sum {} \; | sort | sha256sum | cut -d' ' -f1)
-          echo "value=$HASH" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            CACHE_BUST=${{ steps.cache-bust.outputs.value }}
+            CACHE_BUST=${{ github.sha }}
 
       - name: Image digest
-        run: echo ${{ steps.meta.outputs.digest }}
-
-      - name: Summary
-        run: |
-          echo "## 🐳 Docker Image Built Successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Registry:** Azure Container Registry" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull command:**" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "az acr login --name <registry-name>" >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+        run: echo "Image pushed with digest ${{ steps.meta.outputs.digest }}"

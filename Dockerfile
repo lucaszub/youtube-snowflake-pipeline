@@ -31,12 +31,11 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 # Invalidate cache for pipelines copy (force fresh copy)
 ARG CACHE_BUST=1
 
-# Copier tout le code du projet (pipelines inclut youtube_dbt + test)
-COPY pipelines/ /app/pipelines/
+# Copier le pipeline Binance
+COPY pipelines/Binance/ /app/pipelines/Binance/
 
 # Variables d'environnement
 ENV PYTHONPATH=/app \
-    DBT_PROJECT_DIR=/app/pipelines/youtube/youtube_dbt \
     PREFECT_API_URL=http://localhost:4200/api
 
 # Créer un utilisateur non-root pour la sécurité

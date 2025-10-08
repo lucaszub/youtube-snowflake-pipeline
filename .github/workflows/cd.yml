@@ -1,90 +1,184 @@
-name: CD - Deploy to Production
+name: CD - Deploy to VPS
 
 on:
-  workflow_run:
-    workflows: ["CI - Build & Push to Registry"]
-    types: [completed]
+  push:
     branches: [main]
-  workflow_dispatch:  # Permet déclenchement manuel depuis l'UI GitHub
+    paths:
+      - 'pipelines/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - 'docker-compose.yml'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/cd.yml'
+  workflow_run:
+    workflows: ["CI - Build and Push to ACR"]
+    types:
+      - completed
 
 env:
-  REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
-  IMAGE_NAME: prefect-pipelines
+  IMAGE_NAME: prefect-worker
 
 jobs:
   deploy:
-    name: Deploy to VPS
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    environment: production  # Protection avec reviewers (optionnel)
+    # Only run if CI workflow succeeded or if directly triggered by push
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Copy deployment script to VPS
-        run: |
-          scp scripts/deploy_vps.sh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:/tmp/deploy_vps.sh
-          ssh ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} "chmod +x /tmp/deploy_vps.sh"
-
-      - name: Deploy to VPS
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
         env:
-          VPS_USER: ${{ secrets.VPS_USER }}
-          VPS_HOST: ${{ secrets.VPS_HOST }}
           ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
           ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-        run: |
-          ssh $VPS_USER@$VPS_HOST "ACR_LOGIN_SERVER=$ACR_LOGIN_SERVER ACR_USERNAME=$ACR_USERNAME ACR_PASSWORD=$ACR_PASSWORD /tmp/deploy_vps.sh"
+          IMAGE_TAG: ${{ github.ref_name }}-${{ github.sha }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: ACR_LOGIN_SERVER,ACR_USERNAME,ACR_PASSWORD,IMAGE_TAG,IMAGE_NAME
+          script: |
+            set -e
+
+            echo "🚀 Starting deployment..."
+
+            # Navigate to project directory
+            cd ~/prefect || { echo "❌ Project directory not found"; exit 1; }
+
+            # Log in to Azure Container Registry
+            echo "🔐 Logging in to ACR..."
+            echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --password-stdin
+
+            # Pull latest images
+            echo "📦 Pulling latest images..."
+            docker pull "${ACR_LOGIN_SERVER}/${IMAGE_NAME}:latest"
+
+            # Update docker-compose to use ACR image
+            echo "📝 Updating docker-compose.yml..."
+            cat > docker-compose.prod.yml <<EOF
+            services:
+              postgres:
+                image: postgres:16-alpine
+                container_name: prefect-postgres
+                environment:
+                  POSTGRES_USER: prefect
+                  POSTGRES_PASSWORD: prefect
+                  POSTGRES_DB: prefect
+                volumes:
+                  - postgres_data:/var/lib/postgresql/data
+                healthcheck:
+                  test: ["CMD-SHELL", "pg_isready -U prefect"]
+                  interval: 10s
+                  timeout: 5s
+                  retries: 5
+                networks:
+                  - prefect-network
+                restart: unless-stopped
+
+              prefect-server:
+                image: prefecthq/prefect:3-python3.11
+                container_name: prefect-server
+                command: prefect server start --host 0.0.0.0
+                environment:
+                  PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://prefect:prefect@postgres:5432/prefect
+                  PREFECT_SERVER_API_HOST: 0.0.0.0
+                  PREFECT_SERVER_API_PORT: 4200
+                  PREFECT_UI_API_URL: http://localhost:4200/api
+                ports:
+                  - "4200:4200"
+                depends_on:
+                  postgres:
+                    condition: service_healthy
+                healthcheck:
+                  test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:4200/api/health\")'"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 5
+                  start_period: 20s
+                networks:
+                  - prefect-network
+                restart: unless-stopped
+
+              prefect-worker:
+                image: ${ACR_LOGIN_SERVER}/${IMAGE_NAME}:latest
+                container_name: prefect-worker
+                environment:
+                  PREFECT_API_URL: http://prefect-server:4200/api
+                depends_on:
+                  prefect-server:
+                    condition: service_healthy
+                restart: unless-stopped
+                networks:
+                  - prefect-network
+
+            volumes:
+              postgres_data:
+
+            networks:
+              prefect-network:
+                driver: bridge
+            EOF
+
+            # Stop and remove old containers
+            echo "🛑 Stopping old containers..."
+            docker compose -f docker-compose.prod.yml down || true
+
+            # Start new containers
+            echo "▶️  Starting new containers..."
+            docker compose -f docker-compose.prod.yml up -d
+
+            # Wait for services to be healthy
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 30
+
+            # Check container status
+            echo "📊 Container status:"
+            docker compose -f docker-compose.prod.yml ps
+
+            # Show logs
+            echo "📋 Recent logs:"
+            docker compose -f docker-compose.prod.yml logs --tail=50 prefect-worker
+
+            # Cleanup old images
+            echo "🧹 Cleaning up old images..."
+            docker image prune -af --filter "until=72h" || true
+
+            echo "✅ Deployment completed successfully!"
 
       - name: Health Check
-        run: |
-          echo "🔍 Running external health check..."
-          sleep 5
-          curl -f http://${{ secrets.VPS_HOST }}:4200/api/health || echo "⚠️  Health check failed"
-
-      - name: Notify on success
-        if: success()
-        run: |
-          echo "## ✅ Deployment Successful!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main-$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Deployed to:** ${{ secrets.VPS_HOST }}" >> $GITHUB_STEP_SUMMARY
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "## ❌ Deployment Failed!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "Check the logs above for details." >> $GITHUB_STEP_SUMMARY
-
-      - name: Send Slack notification (optional)
-        if: always()
-        continue-on-error: true
-        uses: slackapi/slack-github-action@v1
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          webhook-url: ${{ secrets.SLACK_WEBHOOK }}
-          payload: |
-            {
-              "text": "${{ job.status == 'success' && '✅' || '❌' }} Deployment ${{ job.status }} - ${{ github.repository }}",
-              "blocks": [
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Deployment Status:* ${{ job.status }}\n*Repository:* ${{ github.repository }}\n*Commit:* ${{ github.sha }}\n*Author:* ${{ github.actor }}"
-                  }
-                }
-              ]
-            }
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ~/prefect
+
+            # Check if all containers are running
+            if docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+              echo "✅ Containers are running"
+            else
+              echo "❌ Some containers are not running"
+              docker compose -f docker-compose.prod.yml ps
+              exit 1
+            fi
+
+            # Check Prefect API health
+            if curl -f http://localhost:4200/api/health; then
+              echo "✅ Prefect API is healthy"
+            else
+              echo "❌ Prefect API health check failed"
+              exit 1
+            fi
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment to VPS succeeded!"
+          else
+            echo "❌ Deployment to VPS failed!"
+          fi

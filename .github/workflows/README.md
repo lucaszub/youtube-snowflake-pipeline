@@ -1,261 +1,251 @@
 # GitHub Actions Workflows
 
-Ce dossier contient les workflows CI/CD pour les pipelines Prefect.
+Ce dossier contient les workflows CI/CD pour le déploiement automatisé du pipeline Prefect.
 
-## 📋 Workflows disponibles
+## Workflows Disponibles
 
-### 1. `ci.yml` - Continuous Integration
+### 1. CI - Build and Push to ACR (`ci.yml`)
 
-**Déclenchement:**
+**Objectif:** Construire l'image Docker et la pousser vers Azure Container Registry.
 
-- Push sur `main` ou `develop`
-- Pull Request vers `main`
+**Déclencheurs:**
+- Push sur `main` (changements dans pipelines/, Dockerfile, requirements.txt, docker-compose.yml)
+- Pull requests vers `main`
 
-**Actions:**
+**Étapes:**
+1. Checkout du code
+2. Setup Docker Buildx
+3. Login à Azure Container Registry
+4. Build de l'image Docker
+5. Push vers ACR avec tags multiples
 
-1. Lint du code (ruff)
-2. Tests unitaires (pytest)
-3. Validation dbt
-4. Build image Docker
-5. Push vers GitHub Container Registry (`ghcr.io`)
+**Sortie:**
+- Image: `<ACR_SERVER>/prefect-worker:latest`
+- Image: `<ACR_SERVER>/prefect-worker:main-<sha>`
 
-**Tags créés:**
+### 2. CD - Deploy to VPS (`cd.yml`)
 
-- `main` - Pour les commits sur main
-- `main-abc1234` - SHA court du commit
-- `latest` - Dernière version de main
+**Objectif:** Déployer l'application sur le VPS après le build réussi.
 
-### 2. `cd.yml` - Continuous Deployment
+**Déclencheurs:**
+- Après succès du workflow CI
+- Push direct sur `main`
 
-**Déclenchement:**
+**Étapes:**
+1. Connexion SSH au VPS
+2. Login à ACR depuis le VPS
+3. Pull de la dernière image
+4. Création/mise à jour de `docker-compose.prod.yml`
+5. Arrêt des anciens conteneurs
+6. Démarrage des nouveaux conteneurs
+7. Health check
+8. Nettoyage des anciennes images
 
-- Push sur `main` (automatique)
-- Manuel via GitHub UI (workflow_dispatch)
+## Configuration Requise
 
-**Actions:**
+### Secrets GitHub
 
-1. SSH vers VPS de production
-2. Pull nouvelle image Docker
-3. Backup PostgreSQL
-4. Redémarrage worker (zero-downtime)
-5. Redéploiement flows Prefect
-6. Health checks
-7. Notification Slack (optionnel)
+Allez dans **Settings → Secrets and variables → Actions** et ajoutez:
 
-## 🔧 Configuration requise
+| Secret | Description | Exemple |
+|--------|-------------|---------|
+| `ACR_LOGIN_SERVER` | URL du registry Azure | `myregistry.azurecr.io` |
+| `ACR_USERNAME` | Username ACR | `myregistry` |
+| `ACR_PASSWORD` | Password ACR | `***` |
+| `VPS_HOST` | IP ou hostname du VPS | `51.210.xxx.xxx` |
+| `VPS_USER` | Username SSH | `ubuntu` |
+| `VPS_SSH_KEY` | Clé privée SSH | `-----BEGIN OPENSSH...` |
 
-### Secrets GitHub à configurer
+### Obtenir les Credentials ACR
 
-**Settings → Secrets and variables → Actions → New repository secret**
+```bash
+# Via Azure CLI
+az acr credential show --name <registry-name>
 
-| Secret          | Description                                  | Exemple                                    |
-| --------------- | -------------------------------------------- | ------------------------------------------ |
-| `VPS_SSH_KEY`   | Clé SSH privée pour accéder au VPS           | `-----BEGIN OPENSSH PRIVATE KEY-----\n...` |
-| `VPS_USER`      | Username sur le VPS                          | `prefect`                                  |
-| `VPS_HOST`      | IP ou hostname du VPS                        | `192.168.1.100` ou `vps.example.com`       |
-| `SLACK_WEBHOOK` | (Optionnel) Webhook Slack pour notifications | `https://hooks.slack.com/services/...`     |
+# Via Azure Portal
+# ACR → Access keys → Enable Admin user
+```
 
-### Générer la clé SSH
+### Générer une Clé SSH
 
 ```bash
 # Sur votre machine locale
-ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/github_actions
+ssh-keygen -t ed25519 -C "github-actions" -f ~/.ssh/github_actions_key
 
 # Copier la clé publique sur le VPS
-ssh-copy-id -i ~/.ssh/github_actions.pub user@vps-ip
+ssh-copy-id -i ~/.ssh/github_actions_key.pub user@vps-host
 
-# Afficher la clé privée (à copier dans GitHub Secrets)
-cat ~/.ssh/github_actions
+# Copier la clé privée dans GitHub Secrets
+cat ~/.ssh/github_actions_key
 ```
 
-## 🚀 Utilisation
+## Utilisation
 
-### Déclenchement automatique
+### Déploiement Automatique
+
+Simplement push sur `main`:
 
 ```bash
-# Tout commit sur main déclenche CI + CD
 git add .
-git commit -m "feat: nouvelle feature"
+git commit -m "feat: update pipeline"
 git push origin main
-
-# GitHub Actions:
-# 1. Build l'image Docker
-# 2. Push vers ghcr.io
-# 3. Déploie automatiquement sur le VPS
 ```
 
-### Déclenchement manuel
+Les workflows s'exécuteront automatiquement:
+1. **CI** build et push l'image
+2. **CD** déploie sur le VPS
 
-**Via GitHub UI:**
-
-1. Aller sur l'onglet "Actions"
-2. Sélectionner "CD - Deploy to Production"
-3. Cliquer "Run workflow"
-4. Choisir la branche (main)
-5. Cliquer "Run workflow"
-
-**Via GitHub CLI:**
+### Monitoring
 
 ```bash
-gh workflow run cd.yml
+# Lister les runs
+gh run list
+
+# Voir les détails d'un run
+gh run view <run-id>
+
+# Voir les logs
+gh run view <run-id> --log
+
+# Re-run un workflow failed
+gh run rerun <run-id>
 ```
 
-## 🔍 Monitoring
+### Déploiement Manuel
 
-### Voir les runs en cours
+Si vous devez déclencher manuellement:
 
 ```bash
 # Via GitHub CLI
-gh run list
+gh workflow run ci.yml
+gh workflow run cd.yml
 
-# Via l'UI
-https://github.com/votre-user/votre-repo/actions
+# Via interface web
+# Actions → Select workflow → Run workflow
 ```
 
-### Voir les logs
+## Architecture du Déploiement
+
+```
+┌─────────────────┐
+│   Developer     │
+│   git push      │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  GitHub Actions │
+│   CI Workflow   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Azure Container│
+│    Registry     │ ◄──────┐
+└────────┬────────┘        │
+         │                 │
+         │                 │
+         ▼                 │
+┌─────────────────┐        │
+│  GitHub Actions │        │
+│   CD Workflow   │        │
+└────────┬────────┘        │
+         │                 │
+         ▼                 │
+┌─────────────────┐        │
+│      VPS        │        │
+│  docker pull    │────────┘
+│  docker compose │
+│      up -d      │
+└─────────────────┘
+```
+
+## Troubleshooting
+
+### Le workflow CI échoue
+
+**Erreur:** `Error: denied: authentication required`
+- **Solution:** Vérifier les secrets `ACR_*` dans GitHub
+
+**Erreur:** `Error: failed to solve: failed to read dockerfile`
+- **Solution:** Vérifier que le Dockerfile existe et est valide
+
+### Le workflow CD échoue
+
+**Erreur:** `Permission denied (publickey)`
+- **Solution:** Vérifier la clé SSH dans `VPS_SSH_KEY`
+- Tester manuellement: `ssh -i key user@host`
+
+**Erreur:** `docker: command not found`
+- **Solution:** Installer Docker sur le VPS (voir CLAUDE.md)
+
+**Erreur:** `Error response from daemon: Get https://...: unauthorized`
+- **Solution:** Vérifier les credentials ACR sur le VPS
+
+### Les conteneurs ne démarrent pas
 
 ```bash
-# Derniers logs
-gh run view
+# Sur le VPS
+ssh user@vps-host
+cd ~/prefect
 
-# Logs d'un run spécifique
-gh run view 123456789 --log
+# Voir les logs
+docker compose -f docker-compose.prod.yml logs
+
+# Vérifier le statut
+docker compose -f docker-compose.prod.yml ps
+
+# Redémarrer manuellement
+docker compose -f docker-compose.prod.yml down
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-## 📦 Images Docker
+## Rollback
 
-### Accéder aux images
-
-Les images sont publiées sur GitHub Container Registry:
-
-```
-ghcr.io/votre-username/prefect:latest
-ghcr.io/votre-username/prefect:main
-ghcr.io/votre-username/prefect:main-abc1234
-```
-
-### Pull une image localement
+Pour revenir à une version précédente:
 
 ```bash
-# Login (une seule fois)
-echo $GITHUB_TOKEN | docker login ghcr.io -u votre-username --password-stdin
+# 1. Identifier le commit SHA de la version stable
+gh run list --workflow=ci.yml --status=success
 
-# Pull
-docker pull ghcr.io/votre-username/prefect:latest
+# 2. Se connecter au VPS
+ssh user@vps-host
+cd ~/prefect
+
+# 3. Modifier docker-compose.prod.yml
+# Remplacer :latest par :main-<old-sha>
+
+# 4. Redémarrer
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-### Rendre le package public
+## Best Practices
 
-**Settings → Packages → prefect → Package settings → Change visibility → Public**
+1. **Toujours tester localement** avant de push:
+   ```bash
+   docker build -t test .
+   docker compose up -d
+   ```
 
-## 🛠️ Troubleshooting
+2. **Utiliser des Pull Requests** pour les changements importants
 
-### "Resource not accessible by integration"
+3. **Monitorer les logs** après chaque déploiement:
+   ```bash
+   gh run list --limit=1
+   ```
 
-**Cause:** Permissions insuffisantes pour GITHUB_TOKEN
+4. **Faire des commits atomiques** avec des messages clairs
 
-**Solution:** Settings → Actions → General → Workflow permissions → "Read and write permissions"
+5. **Taguer les releases** pour faciliter les rollbacks:
+   ```bash
+   git tag -a v1.0.0 -m "Release 1.0.0"
+   git push origin v1.0.0
+   ```
 
-### "Permission denied (publickey)"
-
-**Cause:** Clé SSH mal configurée
-
-**Solutions:**
-
-1. Vérifier que `VPS_SSH_KEY` contient la clé privée complète
-2. Vérifier que la clé publique est dans `~/.ssh/authorized_keys` sur le VPS
-3. Tester manuellement: `ssh -i ~/.ssh/github_actions user@vps-ip`
-
-### Workflow bloqué sur "Waiting for approval"
-
-**Cause:** Environment protection rules activées
-
-**Solution:** Settings → Environments → production → Remove protection rules (ou approuver manuellement)
-
-### Build échoue sur "docker: command not found"
-
-**Cause:** Le runner n'a pas Docker (rare sur ubuntu-latest)
-
-**Solution:** Ajouter step:
-
-```yaml
-- name: Setup Docker
-  uses: docker/setup-buildx-action@v3
-```
-
-## 📊 Métriques
-
-### Temps de build moyen
-
-- Lint & Tests: ~2 minutes
-- Build Docker: ~3-5 minutes (avec cache)
-- Déploiement: ~1-2 minutes
-
-### Consommation GitHub Actions
-
-- Minutes gratuites: 2000/mois (compte gratuit)
-- Estimation: ~10 minutes par déploiement complet
-- Capacité: ~200 déploiements/mois
-
-## 🔄 Rollback
-
-### Rollback automatique (si échec)
-
-Le workflow CD ne modifie pas les containers si une étape échoue (`set -e`).
-
-### Rollback manuel
-
-```bash
-# Option 1: Redéployer un commit précédent
-git revert HEAD
-git push origin main  # Déclenche automatiquement CD
-
-# Option 2: Déployer une image spécifique
-# Sur le VPS:
-docker pull ghcr.io/user/prefect:main-abc1234  # Version stable
-docker tag ghcr.io/user/prefect:main-abc1234 prefect-pipelines:latest
-docker compose up -d --no-deps prefect-worker
-```
-
-## 📝 Customisation
-
-### Ajouter des tests
-
-Créer le dossier `tests/` à la racine:
-
-```bash
-mkdir -p tests/unit tests/integration
-```
-
-Le workflow CI les exécutera automatiquement.
-
-### Changer le registry (AWS ECR, Docker Hub)
-
-Modifier dans `ci.yml`:
-
-```yaml
-env:
-  REGISTRY: docker.io # ou 123456789.dkr.ecr.us-east-1.amazonaws.com
-  IMAGE_NAME: username/prefect-pipelines
-```
-
-### Ajouter un environment staging
-
-Créer `.github/workflows/cd-staging.yml` avec:
-
-```yaml
-on:
-  push:
-    branches: [develop]
-
-jobs:
-  deploy:
-    environment: staging # Déploie sur staging au lieu de prod
-```
-
-## 🔗 Liens utiles
+## Ressources
 
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [GitHub Container Registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [Docker Build Push Action](https://github.com/docker/build-push-action)
 - [SSH Action](https://github.com/appleboy/ssh-action)
+- [Azure Container Registry Docs](https://docs.microsoft.com/en-us/azure/container-registry/)

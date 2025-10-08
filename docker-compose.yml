@@ -43,7 +43,7 @@ services:
     networks:
       - prefect-network
 
-  # Worker Prefect (exécute les pipelines)
+  # Worker Prefect (exécute le pipeline Binance)
   prefect-worker:
     build:
       context: .
@@ -51,18 +51,6 @@ services:
     container_name: prefect-worker
     environment:
       PREFECT_API_URL: http://prefect-server:4200/api
-      # Variables depuis .env
-      YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-      AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING}
-      BLOB_CONTAINER_NAME: ${BLOB_CONTAINER_NAME}
-      SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT}
-      SNOWFLAKE_USER: ${SNOWFLAKE_USER}
-      SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD}
-      SNOWFLAKE_WAREHOUSE: ${SNOWFLAKE_WAREHOUSE}
-      SNOWFLAKE_DATABASE: ${SNOWFLAKE_DATABASE}
-      SNOWFLAKE_SCHEMA: ${SNOWFLAKE_SCHEMA}
-      SNOWFLAKE_ROLE: ${SNOWFLAKE_ROLE}
     depends_on:
       prefect-server:
         condition: service_healthy
